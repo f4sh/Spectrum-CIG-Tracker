@@ -21,6 +21,8 @@ let isLoggingIn = false;
 let initialToken = null;
 let tokenChangeTimeout = null;
 let redirectionTimeout = null;
+let rsiTabId = null;
+let spectrumTabId = null;
 
 const motdCheckInterval = 60000;
 
@@ -80,15 +82,23 @@ function closeRSILoginPage(tabId) {
 
 async function openAndCloseMainRSIPage() {
     return new Promise((resolve) => {
-        chrome.tabs.create({ url: 'https://robertsspaceindustries.com/' }, (tab) => {
-            loginTabId = tab.id;
-            console.log("Opened main RSI page to retrieve cookies.");
-
-            setTimeout(() => {
-                closeRSILoginPage(loginTabId);
-                loginTabId = null;
+        chrome.tabs.query({ url: 'https://robertsspaceindustries.com/*' }, (tabs) => {
+            if (tabs.length > 0) {
+                rsiTabId = tabs[0].id;
+                console.log("RSI page already open, reusing tab ID:", rsiTabId);
                 resolve();
-            }, 2000);
+            } else {
+                chrome.tabs.create({ url: 'https://robertsspaceindustries.com/' }, (tab) => {
+                    rsiTabId = tab.id;
+                    console.log("Opened main RSI page to retrieve cookies.");
+
+                    setTimeout(() => {
+                        closeRSILoginPage(rsiTabId);
+                        rsiTabId = null;
+                        resolve();
+                    }, 2000);
+                });
+            }
         });
     });
 }
@@ -114,31 +124,39 @@ async function notifyUserRedirectionFailed() {
 
 async function openSpectrumLoginPage() {
     return new Promise((resolve) => {
-        chrome.tabs.create({ url: 'https://robertsspaceindustries.com/connect?jumpto=/spectrum/community/SC' }, (tab) => {
-            if (tab && tab.id) {
-                loginTabId = tab.id;
-                console.log("Opened Spectrum login page.");
+        chrome.tabs.query({ url: 'https://robertsspaceindustries.com/connect?jumpto=/spectrum/community/SC' }, (tabs) => {
+            if (tabs.length > 0) {
+                spectrumTabId = tabs[0].id;
+                console.log("Spectrum login page already open, reusing tab ID:", spectrumTabId);
+                resolve(spectrumTabId);
             } else {
-                console.error("Failed to open login page: No tab ID available.");
+                chrome.tabs.create({ url: 'https://robertsspaceindustries.com/connect?jumpto=/spectrum/community/SC' }, (tab) => {
+                    if (tab && tab.id) {
+                        spectrumTabId = tab.id;
+                        console.log("Opened Spectrum login page.");
+                    } else {
+                        console.error("Failed to open login page: No tab ID available.");
+                    }
+
+                    redirectionTimeout = setTimeout(async () => {
+                        console.log("Redirection to Spectrum community page not detected in time.");
+                        await notifyUserRedirectionFailed();
+                        spectrumTabId = null;
+                    }, 5000);
+
+                    resolve(tab ? tab.id : null);
+                });
             }
-
-            redirectionTimeout = setTimeout(async () => {
-                console.log("Redirection to Spectrum community page not detected in time.");
-                await notifyUserRedirectionFailed();
-                loginTabId = null;
-            }, 5000);
-
-            resolve(tab ? tab.id : null);
         });
     });
 }
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (changeInfo.url === 'https://robertsspaceindustries.com/spectrum/community/SC' && tabId === loginTabId) {
+    if (changeInfo.url === 'https://robertsspaceindustries.com/spectrum/community/SC' && tabId === spectrumTabId) {
         console.log("Detected redirection to Spectrum community page; closing the tab.");
         clearTimeout(redirectionTimeout);
         closeRSILoginPage(tabId);
-        loginTabId = null;
+        spectrumTabId = null;
     }
 });
 

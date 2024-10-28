@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Exo:ital,wght@0,100..900;1,100..900&display=swap');
+
+        body {
+            font-family: 'Exo', sans-serif;
+            color: white;
+            background-color: #1a587d;
+            text-align: center;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+            animation: fadeIn 1s ease-out;
+        }
+
+        h2 {
+            font-size: 20px;
+            margin: 20px 0;
+            animation: fadeIn 1s ease-out;
+        }
+
+        .filter-container {
+            margin-bottom: 15px;
+        }
+
+        .filter-button {
+            background-color: #1a587d;
+            color: white;
+            border: 1px solid #64c8ff;
+            padding: 5px 10px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-right: 5px;
+        }
+
+        .filter-button:hover {
+            background-color: #64c8ff;
+        }
+
+        .filter-button.active {
+            background-color: #64c8ff;
+        }
+
+        .notification-container {
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            padding: 0px 10px;
+            max-width: 50rem;
+            min-width: 21rem;
+            overflow-y: auto;
+        }
+
+        .notification-block {
+            background-color: rgba(12, 38, 53, 0.5);
+            border-radius: 5px;
+            padding: 26px;
+            margin: 10px 0;
+            text-align: left;
+            word-wrap: break-word;
+            word-break: break-all;
+            animation: fadeInToHalf 0.5s ease-out forwards;
+        }
+
+        .notification-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .notification-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 10px;
+            background-color: #1e3444;
+            object-fit: cover;
+        }
+
+        .notification-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #64c8ff;
+        }
+
+        .notification-time {
+            font-size: 12px;
+            color: #c2e9ff;
+        }
+
+        .notification-body {
+            margin: 10px 0;
+            font-size: 14px;
+            color: white;
+            line-height: 1.4;
+        }
+
+        .notification-link {
+            font-size: 14px;
+            color: #1d9aeb;
+            text-decoration: none;
+            overflow-wrap: anywhere;
+        }
+
+        .notification-link:hover {
+            text-decoration: underline;
+        }
+
+        .notification-username {
+            font-size: 16px;
+            color: #64c8ff;
+            text-decoration: none;
+            overflow-wrap: anywhere;
+        }
+
+        .notification-username:hover {
+            text-decoration: none;
+        }
+
+        #paginationContainer {
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        .page-button {
+            background-color: #1a587d;
+            color: white;
+            border: 1px solid #64c8ff;
+            padding: 5px 10px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .page-button:hover {
+            background-color: #64c8ff;
+        }
+
+        .page-button.active {
+            background-color: #64c8ff;
+        }
+
+        .filter-container {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        .styled-dropdown {
+            background-color: #1e3444;
+            border: 1px solid #64c8ff;
+            color: white;
+            border-radius: 5px;
+            padding: 8px;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.3s ease, transform 0.2s ease;
+            max-width: 250px;
+            box-sizing: border-box;
+        }
+
+        .styled-dropdown:focus {
+            border-color: #1d9aeb;
+            transform: scale(1.05);
+        }
+
+        .styled-dropdown option {
+            background-color: #1e3444;
+            color: white;
+            padding: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Notification History</h2>
+
+    <div class="filter-container">
+        <select id="developerFilter" class="styled-dropdown">
+            <option value="all">All Developers</option>
+        </select>
+        <select id="messageTypeFilter" class="styled-dropdown">
+            <option value="all">All Types of Messages</option>
+            <option value="chat">Chat</option>
+            <option value="thread">Thread</option>
+        </select>
+    </div>
+
+    <div class="notification-container" id="historyContainer"></div>
+    <div id="paginationContainer"></div>
+
+    <script src="history.js"></script>
+</body>
+
+</html>

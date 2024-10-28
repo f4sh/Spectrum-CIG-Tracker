@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Exo:ital,wght@0,100..900;1,100..900&display=swap');
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeInToHalf {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 0.9;
+            }
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateY(-20px);
+            }
+
+            to {
+                transform: translateY(0);
+            }
+        }
+
+        body {
+            font-family: 'Exo', sans-serif;
+            text-align: center;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            margin: 0;
+            background-color: #1a587d;
+            width: 490px;
+            box-sizing: border-box;
+            animation: fadeIn 1s ease-out;
+        }
+
+        #trackerForm {
+            box-sizing: border-box;
+            width: calc(100% - 40px);
+            max-width: 450px;
+            padding: 0;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        .form-container {
+            background-color: rgba(12, 38, 53, 0.5);
+            padding: 12px;
+            margin-top: 11px;
+            margin-bottom: 5px;
+            box-sizing: border-box;
+            width: 100%;
+            border-radius: 5px;
+            animation: fadeInToHalf 0.5s ease-out forwards;
+        }
+
+        .user-selection {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+            margin-bottom: 10px;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        .user-selection input[type="checkbox"] {
+            display: none;
+        }
+
+        .user-selection label {
+            padding: 9px;
+            margin: 5px;
+            border: 1px solid #64c8ff;
+            border-radius: 5px;
+            background-color: transparent;
+            color: #64c8ff;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            font-size: 12px;
+            text-align: center;
+            box-sizing: border-box;
+            flex-grow: 1;
+            white-space: nowrap;
+            flex-basis: auto;
+            max-width: calc(100% / 3 - 10px);
+            flex-shrink: 1;
+        }
+
+        .user-selection:last-child {
+            justify-content: center;
+        }
+
+        .user-selection input[type="checkbox"]:checked+label {
+            background-color: #1d9aeb;
+            color: white;
+        }
+
+        @media (max-width: 490px) {
+            .user-selection {
+                justify-content: center;
+            }
+
+            .user-selection label {
+                flex-grow: 0;
+                flex-shrink: 0;
+            }
+
+            .user-selection label:nth-last-child(1):nth-child(n+1) {
+                flex-grow: 0;
+                flex-shrink: 0;
+                max-width: calc(50% - 10px);
+            }
+        }
+
+        #interval {
+            width: calc(33px);
+            padding: 8px;
+            border: 1px solid #64c8ff;
+            border-radius: 5px;
+            margin: 10px;
+            color: white;
+            font-size: 15px;
+            background-color: #1e3444;
+            margin-bottom: 8px;
+            transition: all 0.3s ease-in-out;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        #interval:focus {
+            transform: scale(1.05);
+            outline: none;
+            border-color: #1d9aeb;
+        }
+
+        button[type="submit"],
+        button[type="button"] {
+            cursor: pointer;
+            background-color: #1e3444;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin-top: 5px;
+            padding: 10px 15px;
+            font-size: 14px;
+            transition: background-color 0.3s, transform 0.1s;
+            width: 100%;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        button[type="submit"]:hover,
+        button[type="button"]:hover {
+            background-color: #1d9aeb;
+        }
+
+        button[type="submit"]:active,
+        button[type="button"]:active {
+            background-color: #163d59;
+            transform: translateY(2px);
+        }
+
+        button.button2 {
+            padding: 8px 16px;
+            font-size: 12px;
+            width: auto;
+            margin-top: 16px;
+            background-color: #1e3444;
+            border-radius: 3px;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+
+        button.button2:hover {
+            background-color: #2b8fda;
+        }
+
+        button.button2:active {
+            background-color: #1e3a4c;
+            transform: translateY(2px);
+        }
+
+        h2 {
+            font-size: 20px;
+            margin: 25px auto;
+            color: white;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        h2 span {
+            font-size: 14px;
+        }
+
+        .footer {
+            background-color: rgba(12, 38, 53, 0.5);
+            color: white;
+            padding: 10px 0;
+            margin-top: 20px;
+            text-align: center;
+            font-size: 10px;
+            opacity: 0.5;
+            width: 100%;
+            animation: fadeInToHalf 0.5s ease-out forwards;
+        }
+
+        .footer a {
+            text-decoration: none;
+            color: white;
+            opacity: 0.8;
+        }
+
+        .footer a:hover,
+        .footer a:active {
+            text-decoration: underline;
+            color: white;
+            opacity: 1;
+        }
+
+        #statsDiv {
+            color: #64c8ff;
+            margin-top: 4px;
+            font-size: 10px;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        #runningTime {
+            margin-top: 14px;
+            color: #64c8ff;
+            font-size: 12px;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        .motd-selection {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+            margin-bottom: 10px;
+            background-color: rgba(12, 38, 53, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            animation: fadeInToHalf 0.5s ease-out forwards;
+        }
+
+        .motd-selection input[type="checkbox"] {
+            margin-right: 10px;
+            cursor: pointer;
+        }
+
+        .motd-selection label {
+            font-size: 12px;
+            color: #64c8ff;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .motd-selection input[type="checkbox"]:checked+label {
+            color: #64c8ff;
+        }
+    </style>
+</head>
+
+<body>
+    <form id="trackerForm">
+        <h2>&#x1F43E; Spectrum CIG Tracker &#x1F43E;<br /> <span id="userCount">Select max 4 Users</span></h2>
+
+        <div class="user-selection">
+            <input type="checkbox" id="trackWakapedia" data-username="Wakapedia-CIG" checked>
+            <label for="trackWakapedia">Wakapedia-CIG</label>
+
+            <input type="checkbox" id="trackBearded" data-username="Bearded-CIG">
+            <label for="trackBearded">Bearded-CIG</label>
+
+            <input type="checkbox" id="trackBault" data-username="Bault-CIG">
+            <label for="trackBault">Bault-CIG</label>
+
+            <input type="checkbox" id="trackSoulcrusher" data-username="Soulcrusher-CIG">
+            <label for="trackSoulcrusher">Soulcrusher-CIG</label>
+
+            <input type="checkbox" id="trackXLB" data-username="XLB-CIG">
+            <label for="trackXLB">XLB-CIG</label>
+
+            <input type="checkbox" id="trackUnderscore" data-username="Underscore-CIG">
+            <label for="trackUnderscore">Underscore-CIG</label>
+
+            <input type="checkbox" id="trackZacPreece" data-username="ZacPreece_CIG">
+            <label for="trackZacPreece">ZacPreece-CIG</label>
+
+            <input type="checkbox" id="trackKoaku" data-username="KoakuCIG">
+            <label for="trackKoaku">KoakuCIG</label>
+
+            <input type="checkbox" id="trackABrown" data-username="ABrown_CIG">
+            <label for="trackABrown">ABrown-CIG</label>
+
+            <input type="checkbox" id="trackYogiklatt" data-username="Yogiklatt-CIG">
+            <label for="trackYogiklatt">Yogiklatt-CIG</label>
+
+            <input type="checkbox" id="trackWintermute" data-username="Wintermute-CIG">
+            <label for="trackWintermute">Wintermute-CIG</label>
+        </div>
+        <div class="motd-selection">
+            <input type="checkbox" id="motdCheckbox">
+            <label for="motdCheckbox">Monitor Changes in Message of the Day (every 60 seconds)</label>
+        </div>
+
+        <div class="form-container">
+            <div>
+                <span>Specify Notification Check Interval (seconds):</span>
+                <input type="number" id="interval" value="10" min="5" />
+            </div>
+        </div>
+        <button id="toggleTracking" type="button">Start Tracking</button>
+    </form>
+    <div id="runningTime">Tracking has been running for: 00h:00m:00s</div>
+    <div id="statsDiv">Notifications Shown: 0, Notifications Clicked: 0</div>
+    <button id="viewHistory" type="button" class="button2">View Notification History</button>
+
+    <div class="footer">
+        <div>&copy; <span id="year"></span> Spectrum Tracker | <a href="https://opensource.org/licenses/MIT"
+                target="_blank" rel="noopener noreferrer">MIT License</a></div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+
+</html>

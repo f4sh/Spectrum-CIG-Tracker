@@ -1,0 +1,40 @@
+{
+    "manifest_version": 3,
+    "name": "Spectrum CIG Tracker",
+    "version": "1.0",
+    "description": "Tracks Spectrum messages from CIG developers, providing real-time desktop notifications for new posts.",
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "icons/icon-16.png",
+            "48": "icons/icon-48.png"
+        }
+    },
+    "permissions": [
+        "cookies",
+        "storage",
+        "notifications",
+        "alarms"
+    ],
+    "host_permissions": [
+        "*://*.robertsspaceindustries.com/*"
+    ],
+    "background": {
+        "scripts": [
+            "background.js"
+        ]
+    },
+    "content_security_policy": {
+        "extension_pages": "script-src 'self'; object-src 'self'"
+    },
+    "icons": {
+        "16": "icons/icon-16.png",
+        "48": "icons/icon-48.png",
+        "128": "icons/icon-128.png"
+    },
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "{8e5b2c93-4a1e-43e1-b6d2-26c9adf52c37}"
+        }
+    }
+}

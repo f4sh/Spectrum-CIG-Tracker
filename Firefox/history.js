@@ -71,7 +71,6 @@ function loadHistory() {
         const historyContainer = document.getElementById('historyContainer');
         const paginationContainer = document.getElementById('paginationContainer');
 
-        // Clear previous content
         historyContainer.innerHTML = '';
         paginationContainer.innerHTML = '';
 
@@ -120,7 +119,7 @@ function loadHistory() {
 
             const body = document.createElement('div');
             body.classList.add('notification-body');
-            body.innerHTML = formatMessage(notification.body);  // Append formatted message as a DOM element
+            body.appendChild(formatMessage(notification.body));
             item.appendChild(body);
 
             if (notification.username !== "MoTD") {
@@ -152,22 +151,49 @@ function loadHistory() {
 
 function formatMessage(message) {
     const div = document.createElement('div');
-    const formattedMessage = message
-        .replace(/(Audience: )/g, `<br><br><strong>Audience:</strong> `)
-        .replace(/(Alpha Patch [\d.]+):/g, `<strong>$1:</strong><br>`)
-        .replace(/Server Info: /g, `<br><strong>Server Info:</strong> `)
-        .replace(/Long Term Persistence:/g, `<br><strong>Long Term Persistence:</strong>`)
-        .replace(/Testing\/Feedback Focus/g, `<br><strong>Testing/Feedback Focus</strong><br>`)
-        .replace(/New Global Event:/g, `<br><strong>New Global Event:</strong>`)
-        .replace(/Known Issues/g, `<br><br><strong>Known Issues</strong><br>`)
-        .replace(/Features & Gameplay/g, `<br><br><strong>Features & Gameplay</strong><br>`)
-        .replace(/Bug Fixes/g, `<br><br><strong>Bug Fixes</strong><br>`)
-        .replace(/Technical/g, `<br><br><strong>Technical</strong><br>`)
-        .replace(/Fixed - /g, `<br>• Fixed - `)
-        .replace(/\n/g, '<br>');
+    const lines = message.split('\n');
 
-    div.innerHTML = formattedMessage;
-    return div.innerHTML;
+    lines.forEach(line => {
+        const p = document.createElement('p');
+
+        const parts = line.split(/(Audience: |Alpha Patch [\d.]+:|Server Info: |Long Term Persistence:|Testing\/Feedback Focus|New Global Event:|Known Issues|Features & Gameplay|Bug Fixes|Technical|Fixed - )/g);
+
+        parts.forEach(part => {
+            const span = document.createElement('span');
+
+            if (part.startsWith('Audience: ')) {
+                span.appendChild(document.createElement('strong')).textContent = 'Audience: ';
+            } else if (part.startsWith('Alpha Patch')) {
+                span.appendChild(document.createElement('strong')).textContent = part;
+            } else if (part.startsWith('Server Info: ')) {
+                span.appendChild(document.createElement('strong')).textContent = 'Server Info: ';
+            } else if (part.startsWith('Long Term Persistence:')) {
+                span.appendChild(document.createElement('strong')).textContent = 'Long Term Persistence:';
+            } else if (part.startsWith('Testing/Feedback Focus')) {
+                span.appendChild(document.createElement('strong')).textContent = 'Testing/Feedback Focus';
+            } else if (part.startsWith('New Global Event:')) {
+                span.appendChild(document.createElement('strong')).textContent = 'New Global Event:';
+            } else if (part.startsWith('Known Issues')) {
+                span.appendChild(document.createElement('strong')).textContent = 'Known Issues';
+            } else if (part.startsWith('Features & Gameplay')) {
+                span.appendChild(document.createElement('strong')).textContent = 'Features & Gameplay';
+            } else if (part.startsWith('Bug Fixes')) {
+                span.appendChild(document.createElement('strong')).textContent = 'Bug Fixes';
+            } else if (part.startsWith('Technical')) {
+                span.appendChild(document.createElement('strong')).textContent = 'Technical';
+            } else if (part.startsWith('Fixed - ')) {
+                span.textContent = '• Fixed - ' + part.slice(8);
+            } else {
+                span.textContent = part;
+            }
+
+            p.appendChild(span);
+        });
+
+        div.appendChild(p);
+    });
+
+    return div;
 }
 
 function filterHistoryByDeveloperAndType(history) {

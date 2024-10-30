@@ -688,9 +688,9 @@ async function sendMotdNotification(message, lobbyName, lastModified) {
 
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'startTracking') {
-        const interval = message.interval * 1000;
+        const intervalMinutes = message.interval / 60;
 
-        clearInterval(trackingInterval);
+        browser.alarms.clear("messageCheckAlarm");
         trackingInterval = null;
         loginNotificationShown = false;
         isLoginConfirmed = false;
@@ -711,11 +711,9 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
                             await openAndCloseMainRSIPage();
 
                             isLoginConfirmed = true;
-                            trackingInterval = setInterval(() => {
-                                checkForNewMessages();
-                            }, interval);
 
-                            console.log(`Tracking messages started at an interval of ${interval / 1000} seconds.`);
+                            browser.alarms.create("messageCheckAlarm", { periodInMinutes: intervalMinutes });
+                            console.log(`Tracking messages started with alarm set to ${intervalMinutes} minute(s).`);
 
                             browser.storage.local.get('trackMotd').then((result) => {
                                 if (result.trackMotd && !motdInterval) {
@@ -735,16 +733,24 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         sendResponse({ success: true });
     } else if (message.action === 'stopTracking') {
+        browser.alarms.clear("messageCheckAlarm");
         stopTrackingService();
         sendResponse({ success: true });
     } else if (message.action === 'changeInterval') {
-        if (trackingInterval) {
-            clearInterval(trackingInterval);
-            trackingInterval = setInterval(() => {
-                checkForNewMessages();
-            }, message.interval * 1000);
-            console.log(`Changed tracking interval to ${message.interval} seconds.`);
-        }
+        const newIntervalMinutes = message.interval / 60;
+
+        browser.alarms.clear("messageCheckAlarm");
+        browser.alarms.create("messageCheckAlarm", { periodInMinutes: newIntervalMinutes });
+        console.log(`Changed tracking interval to ${newIntervalMinutes} minute(s).`);
+
+        sendResponse({ success: true });
+    }
+});
+
+browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === "messageCheckAlarm") {
+        console.log("Alarm triggered for checkForNewMessages.");
+        checkForNewMessages();
     }
 });
 

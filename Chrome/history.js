@@ -81,15 +81,7 @@ function loadHistory() {
             const item = document.createElement('div');
             item.classList.add('notification-block');
 
-            const formattedBody = (notification.username === "MoTD")
-                ? notification.body
-                    .split('\n')
-                    .join('<br><br>')
-                    .replace(
-                        /(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))/g,
-                        '<a href="$3" target="_blank" class="notification-link">$2</a>'
-                    )
-                : notification.body;
+            const formattedBody = formatMessage(notification.body);
 
             const usernameLink = notification.username !== "MoTD"
                 ? `<a href="https://robertsspaceindustries.com/spectrum/search?member=${encodeURIComponent(notification.username)}&page=1&q=&range=day&role&scopes=op%2Creply%2Cchat&sort=latest&visibility=nonerased" target="_blank" class="notification-username">${notification.username}</a>`
@@ -123,6 +115,23 @@ function loadHistory() {
         }
     });
 }
+
+function formatMessage(message) {
+    return message
+        .replace(/(Audience: )/g, `<br><br><strong>Audience:</strong> `)
+        .replace(/(Alpha Patch [\d.]+):/g, `<strong>$1:</strong><br>`)
+        .replace(/Server Info: /g, `<br><strong>Server Info:</strong> `)
+        .replace(/Long Term Persistence:/g, `<br><strong>Long Term Persistence:</strong>`)
+        .replace(/Testing\/Feedback Focus/g, `<br><strong>Testing/Feedback Focus</strong><br>`)
+        .replace(/New Global Event:/g, `<br><strong>New Global Event:</strong>`)
+        .replace(/Known Issues/g, `<br><br><strong>Known Issues</strong><br>`)
+        .replace(/Features & Gameplay/g, `<br><br><strong>Features & Gameplay</strong><br>`)
+        .replace(/Bug Fixes/g, `<br><br><strong>Bug Fixes</strong><br>`)
+        .replace(/Technical/g, `<br><br><strong>Technical</strong><br>`)
+        .replace(/Fixed - /g, `<br>• Fixed - `)
+        .replace(/\n/g, '<br>');
+}
+
 
 function filterHistoryByDeveloperAndType(history) {
     return history.filter(notification => {

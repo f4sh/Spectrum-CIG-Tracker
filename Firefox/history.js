@@ -5,7 +5,7 @@ const predefinedUsers = {
     'Underscore-CIG': 556,
     'ZacPreece_CIG': 3154801,
     'KoakuCIG': 525336,
-    'ABrown-CIG': 115933,
+    'ABrown_CIG': 115933,
     'Yogiklatt-CIG': 287195,
     'Wintermute-CIG': 3880356,
     'XLB-CIG': 3126689,
@@ -81,84 +81,23 @@ function loadHistory() {
             const item = document.createElement('div');
             item.classList.add('notification-block');
 
-            const headerDiv = document.createElement('div');
-            headerDiv.classList.add('notification-header');
+            const formattedBody = formatMessage(notification.body);
 
-            if (notification.username !== "MoTD") {
-                const avatarImg = document.createElement('img');
-                avatarImg.src = notification.avatarUrl;
-                avatarImg.alt = notification.username;
-                avatarImg.classList.add('notification-avatar');
-                headerDiv.appendChild(avatarImg);
-            }
+            const usernameLink = notification.username !== "MoTD"
+                ? `<a href="https://robertsspaceindustries.com/spectrum/search?member=${encodeURIComponent(notification.username)}&page=1&q=&range=day&role&scopes=op%2Creply%2Cchat&sort=latest&visibility=nonerased" target="_blank" class="notification-username">${notification.username}</a>`
+                : notification.username;
 
-            const titleDiv = document.createElement('div');
-
-            if (notification.username !== "MoTD") {
-                const usernameLink = document.createElement('a');
-                usernameLink.classList.add('notification-username');
-                usernameLink.textContent = notification.username;
-                usernameLink.href = `https://robertsspaceindustries.com/spectrum/search?member=${encodeURIComponent(notification.username)}&page=1&q=&range=day&role&scopes=op%2Creply%2Cchat&sort=latest&visibility=nonerased`;
-                usernameLink.target = '_blank';
-                titleDiv.appendChild(usernameLink);
-            } else {
-                const usernameText = document.createElement('span');
-                usernameText.classList.add('notification-username');
-                usernameText.textContent = notification.username;
-                titleDiv.appendChild(usernameText);
-            }
-
-            const timeDiv = document.createElement('div');
-            timeDiv.classList.add('notification-time');
-            timeDiv.textContent = `${notification.timeCreated} in ${notification.lobbyName}`;
-            titleDiv.appendChild(timeDiv);
-            headerDiv.appendChild(titleDiv);
-
-            item.appendChild(headerDiv);
-
-            const bodyDiv = document.createElement('div');
-            bodyDiv.classList.add('notification-body');
-
-            const lines = notification.body.split('\n');
-            lines.forEach(line => {
-                const lineElem = document.createElement('div');
-
-                const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
-                let lastIndex = 0;
-                let match;
-                while ((match = linkRegex.exec(line)) !== null) {
-                    if (match.index > lastIndex) {
-                        lineElem.appendChild(document.createTextNode(line.slice(lastIndex, match.index)));
-                    }
-
-                    const anchor = document.createElement('a');
-                    anchor.href = match[2];
-                    anchor.target = '_blank';
-                    anchor.classList.add('notification-link');
-                    anchor.textContent = match[1];
-                    lineElem.appendChild(anchor);
-
-                    lastIndex = linkRegex.lastIndex;
-                }
-
-                if (lastIndex < line.length) {
-                    lineElem.appendChild(document.createTextNode(line.slice(lastIndex)));
-                }
-
-                bodyDiv.appendChild(lineElem);
-            });
-
-            item.appendChild(bodyDiv);
-
-            if (notification.username !== "MoTD" && notification.messageLink) {
-                const messageLink = document.createElement('a');
-                messageLink.href = notification.messageLink;
-                messageLink.target = '_blank';
-                messageLink.classList.add('notification-link');
-                messageLink.textContent = 'View Message';
-                item.appendChild(messageLink);
-            }
-
+            item.innerHTML = `
+                <div class="notification-header">
+                    ${notification.username !== "MoTD" ? `<img src="${notification.avatarUrl}" alt="${notification.username}" class="notification-avatar">` : ''}
+                    <div>
+                        <div class="notification-title">${usernameLink}</div>
+                        <div class="notification-time">${notification.timeCreated} in ${notification.lobbyName}</div>
+                    </div>
+                </div>
+                <div class="notification-body">${formattedBody}</div>
+                ${notification.username !== "MoTD" ? `<a href="${notification.messageLink}" target="_blank" class="notification-link">View Message</a>` : ''}
+            `;
             historyContainer.appendChild(item);
         });
 
@@ -175,6 +114,22 @@ function loadHistory() {
             paginationContainer.appendChild(pageButton);
         }
     });
+}
+
+function formatMessage(message) {
+    return message
+        .replace(/(Audience: )/g, `<br><br><strong>Audience:</strong> `)
+        .replace(/(Alpha Patch [\d.]+):/g, `<strong>$1:</strong><br>`)
+        .replace(/Server Info: /g, `<br><strong>Server Info:</strong> `)
+        .replace(/Long Term Persistence:/g, `<br><strong>Long Term Persistence:</strong>`)
+        .replace(/Testing\/Feedback Focus/g, `<br><strong>Testing/Feedback Focus</strong><br>`)
+        .replace(/New Global Event:/g, `<br><strong>New Global Event:</strong>`)
+        .replace(/Known Issues/g, `<br><br><strong>Known Issues</strong><br>`)
+        .replace(/Features & Gameplay/g, `<br><br><strong>Features & Gameplay</strong><br>`)
+        .replace(/Bug Fixes/g, `<br><br><strong>Bug Fixes</strong><br>`)
+        .replace(/Technical/g, `<br><br><strong>Technical</strong><br>`)
+        .replace(/Fixed - /g, `<br>• Fixed - `)
+        .replace(/\n/g, '<br>');
 }
 
 function filterHistoryByDeveloperAndType(history) {

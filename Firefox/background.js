@@ -34,10 +34,10 @@ browser.cookies.onChanged.addListener(async (changeInfo) => {
             currentCookies = await getRSICookies();
             console.log("Current cookies updated:", currentCookies);
 
-            if (currentCookies && rsiTabId) {
+            if (currentCookies && loginTabId) {
                 clearTimeout(cookieTimeout);
-                closeRSILoginPage(rsiTabId);
-                rsiTabId = null;
+                closeRSILoginPage(loginTabId);
+                loginTabId = null;
                 isRSITabOpened = false;
             }
         } else if (isLoginRequired && cookieName === "Rsi-Token") {
@@ -47,7 +47,7 @@ browser.cookies.onChanged.addListener(async (changeInfo) => {
             if (initialToken !== newToken) {
                 console.log("Rsi-Token changed; login confirmed.");
                 isLoginRequired = false;
-                closeRSILoginPage(rsiTabId);
+                closeRSILoginPage(loginTabId);
             }
         }
     }
@@ -197,7 +197,7 @@ async function getTrackingInterval() {
     return (result.interval || 60) * 1000;
 }
 
-browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (tabId === spectrumTabId && changeInfo.status === "complete") {
         browser.tabs.get(tabId).then(async (updatedTab) => {
             if (updatedTab.url === "https://robertsspaceindustries.com/spectrum/community/SC") {
@@ -488,42 +488,48 @@ async function createNotification(message, username, avatarUrl = null) {
     });
 }
 
+const lastMessageIds = {};
+
 async function checkForNewMessages() {
     if (!isLoginConfirmed) {
         console.warn("Login not confirmed; skipping message checks.");
         return;
     }
 
-    browser.storage.local.get('shownMessageIds').then(async (result) => {
-        let shownMessageIds = result.shownMessageIds || {};
-        browser.storage.local.get('selectedUsers').then(async (result) => {
-            const selectedUsers = result.selectedUsers || [];
-            console.log("Checking for new messages for users:", selectedUsers);
-            for (const username of selectedUsers) {
-                const userId = predefinedUsers[username];
-                console.log(`Processing user: ${username}, userId: ${userId}`);
-                try {
-                    const messages = await fetchUserMessages(userId);
-                    if (messages.length > 0) {
-                        const latestMessage = messages[0];
-                        const messageId = latestMessage._id;
-                        if (!shownMessageIds[username] || shownMessageIds[username] !== messageId) {
-                            await createNotification(latestMessage, username);
-                            shownMessageIds[username] = messageId;
-                            browser.storage.local.set({ shownMessageIds });
-                            console.log(`Notification sent for user ${username}, messageId: ${messageId}`);
-                        } else {
-                            console.log(`Notification for user ${username} with messageId ${messageId} has already been shown.`);
-                        }
+    try {
+        const selectedUsersResult = await browser.storage.local.get('selectedUsers');
+        const selectedUsers = selectedUsersResult.selectedUsers || [];
+
+        console.log("Checking for new messages for users:", selectedUsers);
+
+        for (const username of selectedUsers) {
+            const userId = predefinedUsers[username];
+            console.log(`Processing user: ${username}, userId: ${userId}`);
+
+            try {
+                const messages = await fetchUserMessages(userId);
+                if (messages.length > 0) {
+                    const latestMessage = messages[0];
+                    const messageId = latestMessage._id;
+
+                    if (lastMessageIds[username] !== messageId) {
+                        await createNotification(latestMessage, username);
+
+                        lastMessageIds[username] = messageId;
+                        console.log(`Notification sent for user ${username}, messageId: ${messageId}`);
                     } else {
-                        console.log(`No new messages for userId ${userId}.`);
+                        console.log(`No new messages for user ${username}; messageId: ${messageId} already shown.`);
                     }
-                } catch (error) {
-                    console.error(`Error checking messages for user ${username}:`, error);
+                } else {
+                    console.log(`No new messages for userId ${userId}.`);
                 }
+            } catch (error) {
+                console.error(`Error fetching messages for user ${username}:`, error);
             }
-        });
-    });
+        }
+    } catch (error) {
+        console.error("Error accessing storage for selectedUsers:", error);
+    }
 }
 
 let previousMotdTimestamps = {};
@@ -755,33 +761,27 @@ browser.alarms.onAlarm.addListener((alarm) => {
 });
 
 browser.runtime.onStartup.addListener(async () => {
-    browser.storage.local.get(['selectedUsers', 'interval', 'tracking', 'trackMotd']).then(async (result) => {
+    try {
+        const result = await browser.storage.local.get(['selectedUsers', 'interval', 'tracking']);
         const interval = result.interval || 60;
 
         loginNotificationShown = false;
         isLoginEnsured = false;
         loginTabId = null;
 
-        await openSpectrumLoginPage().then(() => {
-            ensureRSILogin().then(async () => {
-                console.log("Login ensured for tracking after startup.");
+        const cookies = await getRSICookies();
+        if (!cookies && !loginNotificationShown) {
+            await notifyUserToLogIn();
+            loginNotificationShown = true;
+        }
 
-                await openAndCloseMainRSIPage();
-
-                if (result.tracking && !trackingInterval) {
-                    trackingInterval = setInterval(() => {
-                        checkForNewMessages();
-                    }, interval * 1000);
-                    console.log("Tracking resumed on startup at an interval of", interval, "seconds.");
-
-                    if (result.trackMotd && !motdInterval) {
-                        startMotdTracking();
-                        console.log("MoTD tracking resumed on startup.");
-                    }
-                }
-            });
-        });
-    });
+        if (result.tracking) {
+            trackingInterval = setInterval(checkForNewMessages, interval * 1000);
+            console.log("Tracking resumed on startup at an interval of", interval, "seconds.");
+        }
+    } catch (error) {
+        console.error("Error during startup:", error);
+    }
 });
 
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {

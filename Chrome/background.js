@@ -14,36 +14,40 @@ const predefinedUsers = {
 
 let trackingInterval = null;
 let loginNotificationShown = false;
-let isLoginEnsured = false;
+let isLoginRequired = false;
 let loginTabId = null;
-let currentCookies = {};
-let isLoggingIn = false;
-let initialToken = null;
-let tokenChangeTimeout = null;
-let redirectionTimeout = null;
-let rsiTabId = null;
 let spectrumTabId = null;
-
+let isRSITabOpened = false;
+let isRedirecting = false;
+let currentCookies = null;
+let initialToken = null;
 const motdCheckInterval = 60000;
+let isLoginConfirmed = false;
 
 chrome.cookies.onChanged.addListener(async (changeInfo) => {
-    const isSpectrumPath = changeInfo.cookie.domain.includes("robertsspaceindustries.com") && changeInfo.cookie.path.includes("/spectrum");
+    const isSpectrumCookie = changeInfo.cookie.domain.includes("robertsspaceindustries.com") && changeInfo.cookie.path.includes("/spectrum");
 
-    if (isSpectrumPath) {
-        if (!isLoggingIn && (changeInfo.cookie.name === "Rsi-Token" || changeInfo.cookie.name === "Rsi-XSRF")) {
-            console.log(`Cookie change detected on Spectrum: ${changeInfo.cookie.name}`);
+    if (isSpectrumCookie) {
+        const cookieName = changeInfo.cookie.name;
+
+        if ((cookieName === "Rsi-Token" || cookieName === "Rsi-XSRF") && !isLoginRequired) {
             currentCookies = await getRSICookies();
-            console.log("Updated current cookies:", currentCookies);
-        } else if (isLoggingIn && changeInfo.cookie.name === "Rsi-Token") {
+            console.log("Current cookies updated:", currentCookies);
+
+            if (currentCookies && rsiTabId) {
+                clearTimeout(cookieTimeout);
+                closeRSILoginPage(rsiTabId);
+                rsiTabId = null;
+                isRSITabOpened = false;
+            }
+        } else if (isLoginRequired && cookieName === "Rsi-Token") {
             const newToken = changeInfo.cookie.value;
-            console.log(`Detected Rsi-Token change on Spectrum: old token = ${initialToken}, new token = ${newToken}`);
+            console.log("Detected Rsi-Token change on Spectrum.");
 
             if (initialToken !== newToken) {
-                console.log("Rsi-Token changed; user likely logged in.");
-                loginTabId = null;
-                isLoggingIn = false;
-            } else {
-                console.log("Rsi-Token unchanged; still waiting for login...");
+                console.log("Rsi-Token changed; login confirmed.");
+                isLoginRequired = false;
+                closeRSILoginPage(rsiTabId);
             }
         }
     }
@@ -73,34 +77,72 @@ async function notifyUserToLogIn() {
 }
 
 function closeRSILoginPage(tabId) {
-    if (tabId) {
+    if (tabId !== null) {
         chrome.tabs.remove(tabId, () => {
-            console.log("Closed RSI login page, tab ID:", tabId);
+            console.log(`Closed RSI login page, tab ID: ${tabId}`);
         });
+        spectrumTabId = null;
+        isRedirecting = false;
+        isRSITabOpened = false;
     }
 }
 
 async function openAndCloseMainRSIPage() {
-    return new Promise((resolve) => {
-        chrome.tabs.query({ url: 'https://robertsspaceindustries.com/*' }, (tabs) => {
-            if (tabs.length > 0) {
-                rsiTabId = tabs[0].id;
-                console.log("RSI page already open, reusing tab ID:", rsiTabId);
-                resolve();
-            } else {
-                chrome.tabs.create({ url: 'https://robertsspaceindustries.com/' }, (tab) => {
-                    rsiTabId = tab.id;
-                    console.log("Opened main RSI page to retrieve cookies.");
+    if (isRSITabOpened) {
+        console.log("Waiting for cookies, RSI page already open.");
+        return;
+    }
 
-                    setTimeout(() => {
-                        closeRSILoginPage(rsiTabId);
-                        rsiTabId = null;
-                        resolve();
-                    }, 2000);
+    isRSITabOpened = true;
+
+    chrome.tabs.query({ url: 'https://robertsspaceindustries.com/*' }, (tabs) => {
+        if (tabs.length > 0) {
+            rsiTabId = tabs[0].id;
+            console.log("Reusing open RSI tab with ID:", rsiTabId);
+
+            chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
+                if (tabId === rsiTabId && changeInfo.status === "complete") {
+                    console.log("Existing RSI tab fully loaded; monitoring cookies.");
+                    monitorCookies();
+                    chrome.tabs.onUpdated.removeListener(listener);
+                }
+            });
+        } else {
+            chrome.tabs.create({ url: 'https://robertsspaceindustries.com/' }, (tab) => {
+                rsiTabId = tab.id;
+                console.log("Opened RSI page to gather cookies.");
+
+                chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
+                    if (tabId === rsiTabId && changeInfo.status === "complete") {
+                        console.log("New RSI tab fully loaded; monitoring cookies.");
+                        monitorCookies();
+                        chrome.tabs.onUpdated.removeListener(listener);
+                    }
                 });
-            }
-        });
+            });
+        }
     });
+}
+
+function monitorCookies() {
+    const checkInterval = setInterval(async () => {
+        const cookies = await getRSICookies();
+        if (cookies) {
+            console.log("Cookies successfully gathered. Closing tab.");
+            clearInterval(checkInterval);
+            closeRSILoginPage(rsiTabId);
+            rsiTabId = null;
+            isRSITabOpened = false;
+        }
+    }, 1000);
+
+    cookieTimeout = setTimeout(() => {
+        clearInterval(checkInterval);
+        console.log("Cookie gathering timed out, closing tab.");
+        closeRSILoginPage(rsiTabId);
+        rsiTabId = null;
+        isRSITabOpened = false;
+    }, 30000);
 }
 
 async function notifyUserRedirectionFailed() {
@@ -123,60 +165,131 @@ async function notifyUserRedirectionFailed() {
 }
 
 async function openSpectrumLoginPage() {
+    if (isRedirecting || spectrumTabId) return;
+    isRedirecting = true;
+
     return new Promise((resolve) => {
-        chrome.tabs.query({ url: 'https://robertsspaceindustries.com/connect?jumpto=/spectrum/community/SC' }, (tabs) => {
-            if (tabs.length > 0) {
-                spectrumTabId = tabs[0].id;
-                console.log("Spectrum login page already open, reusing tab ID:", spectrumTabId);
-                resolve(spectrumTabId);
+        chrome.tabs.create({ url: 'https://robertsspaceindustries.com/connect?jumpto=/spectrum/community/SC' }, (tab) => {
+            if (tab && tab.id) {
+                spectrumTabId = tab.id;
+                console.log("Opened Spectrum login page, waiting for redirection.");
             } else {
-                chrome.tabs.create({ url: 'https://robertsspaceindustries.com/connect?jumpto=/spectrum/community/SC' }, (tab) => {
-                    if (tab && tab.id) {
-                        spectrumTabId = tab.id;
-                        console.log("Opened Spectrum login page.");
-                    } else {
-                        console.error("Failed to open login page: No tab ID available.");
-                    }
-
-                    redirectionTimeout = setTimeout(async () => {
-                        console.log("Redirection to Spectrum community page not detected in time.");
-                        await notifyUserRedirectionFailed();
-                        spectrumTabId = null;
-                    }, 5000);
-
-                    resolve(tab ? tab.id : null);
-                });
+                console.error("Failed to open login page.");
+                isRedirecting = false;
+                resolve(null);
             }
         });
     });
 }
 
+async function startTrackingAfterRedirection() {
+    if (!currentCookies || !isLoginConfirmed) {
+        console.warn("Redirection not confirmed; tracking will not start.");
+        return;
+    }
+
+    const interval = await getTrackingInterval();
+    trackingInterval = setInterval(() => {
+        checkForNewMessages();
+    }, interval);
+
+    console.log(`Tracking messages started at an interval of ${interval / 1000} seconds.`);
+    chrome.storage.local.get('trackMotd', (result) => {
+        if (result.trackMotd) startMotdTracking();
+    });
+}
+
+async function getTrackingInterval() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get('interval', (result) => {
+            resolve((result.interval || 60) * 1000);
+        });
+    });
+}
+
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (changeInfo.url === 'https://robertsspaceindustries.com/spectrum/community/SC' && tabId === spectrumTabId) {
-        console.log("Detected redirection to Spectrum community page; closing the tab.");
-        clearTimeout(redirectionTimeout);
-        closeRSILoginPage(tabId);
-        spectrumTabId = null;
+    if (tabId === spectrumTabId && changeInfo.status === "complete") {
+        chrome.tabs.get(tabId, async (updatedTab) => {
+            if (updatedTab.url === "https://robertsspaceindustries.com/spectrum/community/SC") {
+                console.log("User redirected correctly to Spectrum; login confirmed.");
+
+                closeRSILoginPage(spectrumTabId);
+
+                await openAndCloseMainRSIPage();
+
+                isLoginConfirmed = true;
+                startTrackingAfterRedirection();
+
+                spectrumTabId = null;
+                isRedirecting = false;
+            } else {
+                console.log("Waiting for proper redirection...");
+            }
+        });
     }
 });
 
-async function ensureRSILogin() {
-    try {
-        console.log("Ensuring RSI login...");
-        await openAndCloseMainRSIPage();
-        console.log("Proceeding to Spectrum login page.");
-        await openSpectrumLoginPage();
-    } catch (error) {
-        console.error("Error in ensureRSILogin:", error.message);
-        setTimeout(async () => {
-            try {
-                console.log("Retrying RSI login...");
-                await openSpectrumLoginPage();
-            } catch (retryError) {
-                console.error("Retry failed in ensureRSILogin:", retryError.message);
-            }
-        }, 2000);
+async function openAndCloseMainRSIPage() {
+    if (isRSITabOpened) {
+        console.log("Waiting for cookies, RSI page already open.");
+        return;
     }
+
+    isRSITabOpened = true;
+
+    chrome.tabs.create({ url: 'https://robertsspaceindustries.com/' }, (tab) => {
+        rsiTabId = tab.id;
+        console.log("Opened RSI main page to gather cookies.");
+
+        chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
+            if (tabId === rsiTabId && changeInfo.status === "complete") {
+                console.log("Main RSI page fully loaded; gathering cookies.");
+
+                monitorCookies();
+
+                chrome.tabs.remove(rsiTabId, () => {
+                    console.log("Closed RSI main page after cookie gathering.");
+                    rsiTabId = null;
+                    isRSITabOpened = false;
+                });
+
+                chrome.tabs.onUpdated.removeListener(listener);
+            }
+        });
+    });
+}
+
+function stopTrackingService() {
+    if (trackingInterval) {
+        clearInterval(trackingInterval);
+        trackingInterval = null;
+        console.log("Stopped tracking messages.");
+    }
+    stopMotdTracking();
+
+    isLoginConfirmed = false;
+    isRSITabOpened = false;
+    isRedirecting = false;
+    spectrumTabId = null;
+    loginTabId = null;
+    currentCookies = null;
+
+    chrome.notifications.create({
+        type: "basic",
+        iconUrl: chrome.runtime.getURL("icons/icon-48.png"),
+        title: "Tracking Stopped",
+        message: "Tracking was stopped automatically due to permission issues. Please log in again.",
+        priority: 2
+    });
+}
+
+async function ensureRSILogin() {
+    currentCookies = await getRSICookies();
+    if (currentCookies) {
+        console.log("User is logged in; cookies valid.");
+        return;
+    }
+    await openSpectrumLoginPage();
 }
 
 async function getRSICookies() {
@@ -185,12 +298,11 @@ async function getRSICookies() {
         chrome.cookies.getAll({ url: 'https://robertsspaceindustries.com/spectrum/' }, (cookies) => {
             const rsiToken = cookies.find(cookie => cookie.name === 'Rsi-Token');
             const xsrfToken = cookies.find(cookie => cookie.name === 'Rsi-XSRF');
-
             if (rsiToken && xsrfToken) {
                 console.log("Spectrum RSI cookies retrieved:", { rsiToken: rsiToken.value, xsrfToken: xsrfToken.value });
                 resolve({ rsiToken: rsiToken.value, xsrfToken: xsrfToken.value });
             } else {
-                console.warn("Required Spectrum cookies not found. Login required.");
+                console.warn("RSI cookies not valid or missing; login required.");
                 resolve(null);
             }
         });
@@ -215,7 +327,13 @@ async function fetchUserMessages(userId, retryCount = 0) {
         if (!loginData || !loginData.rsiToken) {
             console.warn("RSI cookies are missing; attempting re-login.");
             await ensureRSILogin();
-            return fetchUserMessages(userId, retryCount + 1);
+
+            if (retryCount < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return fetchUserMessages(userId, retryCount + 1);
+            } else {
+                throw new Error("Max retries reached; unable to retrieve cookies.");
+            }
         }
 
         const { rsiToken, xsrfToken } = loginData;
@@ -231,18 +349,13 @@ async function fetchUserMessages(userId, retryCount = 0) {
             visibility: "nonerased"
         };
 
-        console.log(`Fetching messages for userId: ${userId}`);
-        console.log("Request Payload:", JSON.stringify(body, null, 2));
-        console.log("Headers - x-rsi-token:", rsiToken, ", x-tavern-id:", tavernId);
-
         const headers = {
             'accept': 'application/json',
             'content-type': 'application/json',
             'x-rsi-token': rsiToken,
             'x-tavern-id': tavernId,
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36'
+            ...(xsrfToken && { 'x-rsi-xsrf': xsrfToken })
         };
-        if (xsrfToken) headers['x-rsi-xsrf'] = xsrfToken;
 
         const response = await fetch("https://robertsspaceindustries.com/api/spectrum/search/content/extended", {
             method: 'POST',
@@ -253,11 +366,17 @@ async function fetchUserMessages(userId, retryCount = 0) {
 
         if (response.ok) {
             const data = await response.json();
-            if (data && data.data && data.data.hits && Array.isArray(data.data.hits.hits)) {
-                console.log(`Messages retrieved for userId ${userId}:`, data.data.hits.hits);
+            if (data.success === 0 && data.code === 'ErrPermissionDenied') {
+                console.warn("Permission Denied error in message fetch.");
+                stopTrackingService();
+                return [];
+            }
+
+            if (data.data?.hits?.hits.length > 0) {
                 return data.data.hits.hits;
             } else {
-                throw new Error('Invalid response structure: no hits found');
+                console.log(`No new messages for userId ${userId}.`);
+                return [];
             }
         } else {
             if (response.status === 403 && retryCount < maxRetries) {
@@ -294,33 +413,27 @@ async function createNotification(message, username, avatarUrl = null) {
     let lobbyName = "Unknown Lobby";
     let titleText = `${details?.member?.nickname || 'Unknown'} posted a message`;
     let contextMessage = `Posted on: ${timeCreated} in ${lobbyName}`;
+    let messageLink = null;
 
     if (username === "MoTD") {
         lobbyName = details.lobby?.name || "MoTD Lobby";
         titleText = `MoTD in ${lobbyName} changed`;
         contextMessage = `Updated on: ${timeCreated}`;
+    } else if (message._index === 'tavern_forum_thread_op' || message._index === 'tavern_forum_thread_reply') {
+        lobbyName = details.channel?.name || "Forum Thread";
+        const communitySlug = details.community?.slug || 'SC';
+        const threadSlug = details.thread?.slug || 'unknown-slug';
+        const channelId = details.channel?.id || 'unknown-channel';
+
+        messageLink = `https://robertsspaceindustries.com/spectrum/community/${communitySlug}/forum/${channelId}/thread/${threadSlug}/${messageId}`;
     } else if (message._index === 'tavern_message') {
         lobbyName = details.lobby?.name || details.channel?.name || "Chat Lobby";
-    } else if (message._index === 'tavern_forum_thread_reply') {
-        lobbyName = details.thread?.title || details.channel?.name || "Forum Thread";
+        const lobbyId = details.lobby?.id || 'undefined';
+        const communitySlug = details.community?.slug || 'SC';
+        messageLink = `https://robertsspaceindustries.com/spectrum/community/${communitySlug}/lobby/${lobbyId}/message/${messageId}`;
     }
 
     contextMessage = username === "MoTD" ? `Updated on: ${timeCreated}` : `Posted on: ${timeCreated} in ${lobbyName}`;
-
-    const communitySlug = details.community?.slug === 'SC' ? 'SC' : details.community?.slug || 'SC';
-    let messageLink = null;
-    if (username !== "MoTD") {
-        if (message._index === 'tavern_forum_thread_reply') {
-            const threadDetails = details.thread || {};
-            const threadSlug = threadDetails.slug || 'unknown-slug';
-            messageLink = `https://robertsspaceindustries.com/spectrum/community/${communitySlug}/forum/3/thread/${threadSlug}/${messageId}`;
-        } else if (message._index === 'tavern_message') {
-            const lobbyId = details.lobby?.id || 'undefined';
-            messageLink = `https://robertsspaceindustries.com/spectrum/community/${communitySlug}/lobby/${lobbyId}/message/${messageId}`;
-        } else {
-            messageLink = `https://robertsspaceindustries.com/spectrum/community/${communitySlug}/message/${messageId}`;
-        }
-    }
 
     const notificationOptions = {
         type: "basic",
@@ -387,25 +500,24 @@ async function createNotification(message, username, avatarUrl = null) {
 }
 
 async function checkForNewMessages() {
+    if (!isLoginConfirmed) {
+        console.warn("Login not confirmed; skipping message checks.");
+        return;
+    }
+
     chrome.storage.local.get('shownMessageIds', async (result) => {
         let shownMessageIds = result.shownMessageIds || {};
-
         chrome.storage.local.get('selectedUsers', async (result) => {
             const selectedUsers = result.selectedUsers || [];
             console.log("Checking for new messages for users:", selectedUsers);
-
             for (const username of selectedUsers) {
                 const userId = predefinedUsers[username];
                 console.log(`Processing user: ${username}, userId: ${userId}`);
-
                 try {
                     const messages = await fetchUserMessages(userId);
                     if (messages.length > 0) {
                         const latestMessage = messages[0];
                         const messageId = latestMessage._id;
-
-                        console.log(`Latest message for userId ${userId}:`, latestMessage);
-
                         if (!shownMessageIds[username] || shownMessageIds[username] !== messageId) {
                             await createNotification(latestMessage, username);
                             shownMessageIds[username] = messageId;
@@ -458,8 +570,10 @@ chrome.runtime.onStartup.addListener(() => {
     });
 });
 
+let motdTrackingEnabled = false;
+
 function startMotdTracking() {
-    if (!motdInterval) {
+    if (!motdInterval && motdTrackingEnabled && trackingInterval) {
         motdInterval = setInterval(checkForMotdUpdates, motdCheckInterval);
         console.log(`Started MoTD tracking at an interval of ${motdCheckInterval / 1000} seconds.`);
     }
@@ -486,7 +600,8 @@ async function checkForMotdUpdates() {
 
 chrome.storage.onChanged.addListener((changes) => {
     if (changes.trackMotd) {
-        if (changes.trackMotd.newValue) {
+        motdTrackingEnabled = changes.trackMotd.newValue;
+        if (motdTrackingEnabled && trackingInterval) {
             startMotdTracking();
         } else {
             stopMotdTracking();
@@ -502,12 +617,11 @@ async function fetchMotd(lobbyId, lobbyName) {
             console.warn("RSI cookies are missing; attempting re-login.");
             await ensureRSILogin();
             console.log("Re-attempting MoTD fetch after login...");
-            return fetchMotd(lobbyId, lobbyName); // Retry fetch after re-login
+            return fetchMotd(lobbyId, lobbyName);
         }
 
         const { rsiToken, xsrfToken } = loginData;
         const tavernId = generateTavernId();
-        console.log(`Generated tavern ID: ${tavernId}`);
 
         const response = await fetch("https://robertsspaceindustries.com/api/spectrum/lobby/getMotd", {
             method: 'POST',
@@ -522,15 +636,17 @@ async function fetchMotd(lobbyId, lobbyName) {
             body: JSON.stringify({ lobby_id: lobbyId })
         });
 
-        console.log(`MoTD fetch response status for ${lobbyName}: ${response.status}`);
-
         if (response.ok) {
             const data = await response.json();
-            console.log(`MoTD response data for ${lobbyName}:`, data);
 
-            const motdMessage = data.data.motd?.message;
-            const lastModified = data.data.motd?.last_modified;
+            if (data.success === 0 && data.code === 'ErrPermissionDenied') {
+                console.warn(`Permission Denied error in lobby: ${lobbyName}`);
+                stopTrackingService();
+                return;
+            }
 
+            const motdMessage = data.data?.motd?.message;
+            const lastModified = data.data?.motd?.last_modified;
             if (motdMessage && lastModified !== previousMotdTimestamps[lobbyId]) {
                 console.log(`New MoTD found for ${lobbyName}. Last modified: ${lastModified}`);
                 previousMotdTimestamps[lobbyId] = lastModified;
@@ -551,7 +667,7 @@ async function sendMotdNotification(message, lobbyName, lastModified) {
     const defaultAvatarUrl = chrome.runtime.getURL("icons/icon-48.png");
 
     chrome.storage.local.get('shownMessageIds', (result) => {
-        let shownMessageIds = result.shownMessageIds || {};
+        const shownMessageIds = result.shownMessageIds || {};
 
         if (shownMessageIds[notificationId]) {
             console.log(`Notification for MoTD in ${lobbyName} already shown.`);
@@ -585,32 +701,52 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'startTracking') {
         const interval = message.interval * 1000;
 
-        if (!trackingInterval) {
-            trackingInterval = setInterval(() => {
-                checkForNewMessages();
-            }, interval);
+        clearInterval(trackingInterval);
+        trackingInterval = null;
+        loginNotificationShown = false;
+        isLoginConfirmed = false;
+        isRSITabOpened = false;
+        spectrumTabId = null;
+        isRedirecting = false;
 
-            ensureRSILogin().then(() => {
-                console.log("Login ensured for tracking.");
-            });
+        openSpectrumLoginPage().then(() => {
+            console.log("Waiting for Spectrum login redirection confirmation...");
 
-            console.log(`Started tracking messages at an interval of ${message.interval} seconds.`);
+            chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo, tab) {
+                if (tabId === spectrumTabId && changeInfo.status === "complete") {
+                    chrome.tabs.get(tabId, async (updatedTab) => {
+                        if (updatedTab.url === "https://robertsspaceindustries.com/spectrum/community/SC") {
+                            console.log("User redirected correctly to Spectrum; login confirmed.");
 
-            chrome.storage.local.get('trackMotd', (result) => {
-                if (result.trackMotd && !motdInterval) {
-                    startMotdTracking();
+                            closeRSILoginPage(spectrumTabId);
+                            await openAndCloseMainRSIPage();
+
+                            isLoginConfirmed = true;
+                            trackingInterval = setInterval(() => {
+                                checkForNewMessages();
+                            }, interval);
+
+                            console.log(`Tracking messages started at an interval of ${interval / 1000} seconds.`);
+
+                            chrome.storage.local.get('trackMotd', (result) => {
+                                if (result.trackMotd && !motdInterval) {
+                                    startMotdTracking();
+                                    console.log("MoTD tracking started after user-initiated tracking start.");
+                                }
+                            });
+
+                            chrome.tabs.onUpdated.removeListener(listener);
+                        } else {
+                            console.log("Waiting for proper Spectrum redirection...");
+                        }
+                    });
                 }
             });
-        }
+        });
 
         sendResponse({ success: true });
     } else if (message.action === 'stopTracking') {
-        if (trackingInterval) {
-            clearInterval(trackingInterval);
-            trackingInterval = null;
-            console.log("Stopped tracking messages.");
-        }
-        stopMotdTracking();
+        stopTrackingService();
         sendResponse({ success: true });
     } else if (message.action === 'changeInterval') {
         if (trackingInterval) {
@@ -631,30 +767,25 @@ chrome.runtime.onStartup.addListener(async () => {
         isLoginEnsured = false;
         loginTabId = null;
 
-        try {
-            const cookies = await getRSICookies();
-            if (!cookies) {
-                await notifyUserToLogIn();
-                loginNotificationShown = true;
-            }
-        } catch (error) {
-            if (!loginNotificationShown) {
-                await notifyUserToLogIn();
-                loginNotificationShown = true;
-            }
-        }
+        await openSpectrumLoginPage().then(() => {
+            ensureRSILogin().then(async () => {
+                console.log("Login ensured for tracking after startup.");
 
-        if (result.tracking && !trackingInterval) {
-            trackingInterval = setInterval(() => {
-                checkForNewMessages();
-            }, interval * 1000);
-            console.log("User tracking resumed on startup at an interval of", interval, "seconds.");
-        }
+                await openAndCloseMainRSIPage();
 
-        if (result.trackMotd && !motdInterval) {
-            startMotdTracking();
-            console.log("MoTD tracking resumed on startup.");
-        }
+                if (result.tracking && !trackingInterval) {
+                    trackingInterval = setInterval(() => {
+                        checkForNewMessages();
+                    }, interval * 1000);
+                    console.log("Tracking resumed on startup at an interval of", interval, "seconds.");
+
+                    if (result.trackMotd && !motdInterval) {
+                        startMotdTracking();
+                        console.log("MoTD tracking resumed on startup.");
+                    }
+                }
+            });
+        });
     });
 });
 
@@ -662,23 +793,48 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'startTracking') {
         const interval = message.interval * 1000;
 
-        if (!trackingInterval) {
-            trackingInterval = setInterval(() => {
-                checkForNewMessages();
-            }, interval);
+        clearInterval(trackingInterval);
+        trackingInterval = null;
+        loginNotificationShown = false;
+        isLoginConfirmed = false;
+        isRSITabOpened = false;
+        spectrumTabId = null;
 
-            ensureRSILogin().then(() => {
-                console.log("Login ensured for tracking.");
-            });
+        openSpectrumLoginPage().then(() => {
+            console.log("Waiting for Spectrum login redirection confirmation...");
 
-            console.log(`Started tracking messages at an interval of ${message.interval} seconds.`);
+            chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo, tab) {
+                if (tabId === spectrumTabId && changeInfo.status === "complete") {
+                    chrome.tabs.get(tabId, async (updatedTab) => {
+                        if (updatedTab.url === "https://robertsspaceindustries.com/spectrum/community/SC") {
+                            console.log("User redirected correctly to Spectrum; login confirmed.");
 
-            chrome.storage.local.get('trackMotd', (result) => {
-                if (result.trackMotd && !motdInterval) {
-                    startMotdTracking();
+                            closeRSILoginPage(spectrumTabId);
+
+                            await openAndCloseMainRSIPage();
+
+                            isLoginConfirmed = true;
+                            trackingInterval = setInterval(() => {
+                                checkForNewMessages();
+                            }, interval);
+
+                            console.log(`Tracking messages started at an interval of ${interval / 1000} seconds.`);
+
+                            chrome.storage.local.get('trackMotd', (result) => {
+                                if (result.trackMotd && !motdInterval) {
+                                    startMotdTracking();
+                                    console.log("MoTD tracking started after user-initiated tracking start.");
+                                }
+                            });
+
+                            chrome.tabs.onUpdated.removeListener(listener);
+                        } else {
+                            console.log("Waiting for proper Spectrum redirection...");
+                        }
+                    });
                 }
             });
-        }
+        });
 
         sendResponse({ success: true });
     } else if (message.action === 'stopTracking') {

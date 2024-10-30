@@ -71,7 +71,9 @@ function loadHistory() {
         const historyContainer = document.getElementById('historyContainer');
         const paginationContainer = document.getElementById('paginationContainer');
 
+        // Clear previous content
         historyContainer.innerHTML = '';
+        paginationContainer.innerHTML = '';
 
         const start = (currentPage - 1) * itemsPerPage;
         const end = start + itemsPerPage;
@@ -81,23 +83,55 @@ function loadHistory() {
             const item = document.createElement('div');
             item.classList.add('notification-block');
 
-            const formattedBody = formatMessage(notification.body);
+            const header = document.createElement('div');
+            header.classList.add('notification-header');
 
-            const usernameLink = notification.username !== "MoTD"
-                ? `<a href="https://robertsspaceindustries.com/spectrum/search?member=${encodeURIComponent(notification.username)}&page=1&q=&range=day&role&scopes=op%2Creply%2Cchat&sort=latest&visibility=nonerased" target="_blank" class="notification-username">${notification.username}</a>`
-                : notification.username;
+            if (notification.username !== "MoTD") {
+                const avatar = document.createElement('img');
+                avatar.src = notification.avatarUrl;
+                avatar.alt = notification.username;
+                avatar.classList.add('notification-avatar');
+                header.appendChild(avatar);
+            }
 
-            item.innerHTML = `
-                <div class="notification-header">
-                    ${notification.username !== "MoTD" ? `<img src="${notification.avatarUrl}" alt="${notification.username}" class="notification-avatar">` : ''}
-                    <div>
-                        <div class="notification-title">${usernameLink}</div>
-                        <div class="notification-time">${notification.timeCreated} in ${notification.lobbyName}</div>
-                    </div>
-                </div>
-                <div class="notification-body">${formattedBody}</div>
-                ${notification.username !== "MoTD" ? `<a href="${notification.messageLink}" target="_blank" class="notification-link">View Message</a>` : ''}
-            `;
+            const titleContainer = document.createElement('div');
+            const usernameElement = document.createElement('div');
+            usernameElement.classList.add('notification-title');
+
+            if (notification.username !== "MoTD") {
+                const usernameLink = document.createElement('a');
+                usernameLink.href = `https://robertsspaceindustries.com/spectrum/search?member=${encodeURIComponent(notification.username)}&page=1&q=&range=day&role&scopes=op%2Creply%2Cchat&sort=latest&visibility=nonerased`;
+                usernameLink.target = '_blank';
+                usernameLink.textContent = notification.username;
+                usernameLink.classList.add('notification-username');
+                usernameElement.appendChild(usernameLink);
+            } else {
+                usernameElement.textContent = notification.username;
+            }
+
+            const timeElement = document.createElement('div');
+            timeElement.classList.add('notification-time');
+            timeElement.textContent = `${notification.timeCreated} in ${notification.lobbyName}`;
+
+            titleContainer.appendChild(usernameElement);
+            titleContainer.appendChild(timeElement);
+            header.appendChild(titleContainer);
+            item.appendChild(header);
+
+            const body = document.createElement('div');
+            body.classList.add('notification-body');
+            body.innerHTML = formatMessage(notification.body);  // Append formatted message as a DOM element
+            item.appendChild(body);
+
+            if (notification.username !== "MoTD") {
+                const messageLink = document.createElement('a');
+                messageLink.href = notification.messageLink;
+                messageLink.target = '_blank';
+                messageLink.classList.add('notification-link');
+                messageLink.textContent = 'View Message';
+                item.appendChild(messageLink);
+            }
+
             historyContainer.appendChild(item);
         });
 
@@ -117,7 +151,8 @@ function loadHistory() {
 }
 
 function formatMessage(message) {
-    return message
+    const div = document.createElement('div');
+    const formattedMessage = message
         .replace(/(Audience: )/g, `<br><br><strong>Audience:</strong> `)
         .replace(/(Alpha Patch [\d.]+):/g, `<strong>$1:</strong><br>`)
         .replace(/Server Info: /g, `<br><strong>Server Info:</strong> `)
@@ -130,17 +165,25 @@ function formatMessage(message) {
         .replace(/Technical/g, `<br><br><strong>Technical</strong><br>`)
         .replace(/Fixed - /g, `<br>• Fixed - `)
         .replace(/\n/g, '<br>');
+
+    div.innerHTML = formattedMessage;
+    return div.innerHTML;
 }
 
 function filterHistoryByDeveloperAndType(history) {
     return history.filter(notification => {
         const developerMatch = (currentDeveloperFilter === 'all' || notification.username === currentDeveloperFilter);
+        const isMotd = notification.username === 'MoTD';
+        const isChat = notification.messageLink && notification.messageLink.includes('/lobby/');
+        const isThread = notification.messageLink && notification.messageLink.includes('/forum/');
+
         const messageTypeMatch = (
             currentMessageTypeFilter === 'all' ||
-            (currentMessageTypeFilter === 'chat' && notification.messageLink && notification.messageLink.includes('/lobby/')) ||
-            (currentMessageTypeFilter === 'thread' && notification.messageLink && notification.messageLink.includes('/forum/')) ||
-            (currentMessageTypeFilter === 'all' && notification.username === 'MoTD')
+            (currentMessageTypeFilter === 'chat' && isChat) ||
+            (currentMessageTypeFilter === 'thread' && isThread) ||
+            (currentMessageTypeFilter === 'motd' && isMotd)
         );
+
         return developerMatch && messageTypeMatch;
     });
 }

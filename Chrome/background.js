@@ -9,7 +9,8 @@ const predefinedUsers = {
     'Yogiklatt-CIG': 287195,
     'Wintermute-CIG': 3880356,
     'XLB-CIG': 3126689,
-    'Soulcrusher-CIG': 4490
+    'Soulcrusher-CIG': 4490,
+    'Armeggadon-CIG': 4392587
 };
 
 let trackingInterval = null;
@@ -169,7 +170,10 @@ async function openSpectrumLoginPage() {
     isRedirecting = true;
 
     return new Promise((resolve) => {
-        chrome.tabs.create({ url: 'https://robertsspaceindustries.com/connect?jumpto=/spectrum/community/SC' }, (tab) => {
+        chrome.tabs.create({
+            url: 'https://robertsspaceindustries.com/connect?jumpto=/spectrum/community/SC',
+            active: false
+        }, (tab) => {
             if (tab && tab.id) {
                 spectrumTabId = tab.id;
                 console.log("Opened Spectrum login page, waiting for redirection.");
@@ -237,7 +241,10 @@ async function openAndCloseMainRSIPage() {
 
     isRSITabOpened = true;
 
-    chrome.tabs.create({ url: 'https://robertsspaceindustries.com/' }, (tab) => {
+    chrome.tabs.create({
+        url: 'https://robertsspaceindustries.com/',
+        active: false
+    }, (tab) => {
         rsiTabId = tab.id;
         console.log("Opened RSI main page to gather cookies.");
 
@@ -402,13 +409,103 @@ async function clearCookies() {
     });
 }
 
+let emojiMap = {};
+let avocadoEmojiMap = {};
+
+const hardcodedEmojis = {
+    ':space_invader:': '👾',
+    ':rocket:': '🚀',
+    ':green_circle:': '🟢',
+    ':red_circle:': '🔴',
+    ':fire:': '🔥',
+    ':pizza:': '🍕',
+    ':tophat:': '🎩',
+    ':monocle_face:': '🧐'
+};
+
+async function fetchEmojis(communityId) {
+    console.log(`Fetching emojis for community ID: ${communityId}...`);
+
+    const cookies = await getRSICookies();
+    const rsiToken = cookies ? cookies.rsiToken : null;
+
+    const response = await fetch("https://robertsspaceindustries.com/api/spectrum/community/fetch-emojis", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "x-rsi-token": rsiToken,
+            "x-tavern-id": generateTavernId()
+        },
+        body: JSON.stringify({ community_id: communityId })
+    });
+
+    if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+
+            if (communityId === "1") {
+                emojiMap = {};
+            } else if (communityId === "9711") {
+                avocadoEmojiMap = {};
+            }
+            data.data.forEach(emoji => {
+                if (communityId === "1") {
+                    emojiMap[`:${emoji.short_name}:`] = emoji.media_url;
+                } else if (communityId === "9711") {
+                    avocadoEmojiMap[`:${emoji.short_name}:`] = emoji.media_url;
+                }
+            });
+            console.log("Emojis fetched successfully:", communityId === "1" ? emojiMap : avocadoEmojiMap);
+        } else {
+            console.error("Error fetching emojis:", data.msg);
+        }
+    } else {
+        console.error("Failed to fetch emojis:", response.statusText);
+    }
+}
+
+function formatMessageWithEmojis(message, communityId) {
+
+    const currentEmojiMap = communityId === "1" ? emojiMap : avocadoEmojiMap;
+
+    for (const [emoticon, url] of Object.entries(currentEmojiMap)) {
+        const regex = new RegExp(emoticon, 'g');
+        message = message.replace(regex, `<img src="${url}" alt="${emoticon}" class="emoticon">`);
+    }
+
+    for (const [emoticon, emoji] of Object.entries(hardcodedEmojis)) {
+        const regex = new RegExp(emoticon, 'g');
+        message = message.replace(regex, emoji);
+    }
+
+    return message;
+}
+
 async function createNotification(message, username, avatarUrl = null) {
     const source = message._source;
     const details = message.details;
 
+    const communityId = details.community?.id;
+    if (!communityId) {
+        console.error("Community ID is undefined. Cannot fetch emojis.");
+        return;
+    }
+
+    await fetchEmojis(communityId);
+
+    let formattedMessage = formatMessageWithEmojis(source.body, communityId);
+
     const notificationAvatarUrl = avatarUrl || details?.member?.avatar || 'icons/icon-48.png';
     const timeCreated = username === "MoTD" ? new Date(details.last_modified * 1000).toLocaleString() : new Date(source.time_created).toLocaleString();
     const messageId = message._id;
+
+    if (lastMessageIds[username] === messageId) {
+        console.log(`Notification for user ${username} with messageId ${messageId} has already been shown.`);
+        return;
+    }
+
+    lastMessageIds[username] = messageId;
 
     let lobbyName = "Unknown Lobby";
     let titleText = `${details?.member?.nickname || 'Unknown'} posted a message`;
@@ -439,7 +536,7 @@ async function createNotification(message, username, avatarUrl = null) {
         type: "basic",
         iconUrl: notificationAvatarUrl,
         title: titleText,
-        message: source.body,
+        message: formattedMessage,
         contextMessage: contextMessage,
         priority: 2
     };
@@ -459,7 +556,7 @@ async function createNotification(message, username, avatarUrl = null) {
                 timeCreated,
                 lobbyName,
                 messageLink,
-                body: source.body,
+                body: formattedMessage,
                 title: notificationOptions.title
             };
 
@@ -499,42 +596,48 @@ async function createNotification(message, username, avatarUrl = null) {
     });
 }
 
+const lastMessageIds = {};
+
 async function checkForNewMessages() {
     if (!isLoginConfirmed) {
         console.warn("Login not confirmed; skipping message checks.");
         return;
     }
 
-    chrome.storage.local.get('shownMessageIds', async (result) => {
-        let shownMessageIds = result.shownMessageIds || {};
-        chrome.storage.local.get('selectedUsers', async (result) => {
-            const selectedUsers = result.selectedUsers || [];
-            console.log("Checking for new messages for users:", selectedUsers);
-            for (const username of selectedUsers) {
-                const userId = predefinedUsers[username];
-                console.log(`Processing user: ${username}, userId: ${userId}`);
-                try {
-                    const messages = await fetchUserMessages(userId);
-                    if (messages.length > 0) {
-                        const latestMessage = messages[0];
-                        const messageId = latestMessage._id;
-                        if (!shownMessageIds[username] || shownMessageIds[username] !== messageId) {
-                            await createNotification(latestMessage, username);
-                            shownMessageIds[username] = messageId;
-                            chrome.storage.local.set({ shownMessageIds });
-                            console.log(`Notification sent for user ${username}, messageId: ${messageId}`);
-                        } else {
-                            console.log(`Notification for user ${username} with messageId ${messageId} has already been shown.`);
-                        }
-                    } else {
-                        console.log(`No new messages for userId ${userId}.`);
-                    }
-                } catch (error) {
-                    console.error(`Error checking messages for user ${username}:`, error);
+    const selectedUsersResult = await chrome.storage.local.get('selectedUsers');
+    const selectedUsers = selectedUsersResult.selectedUsers || [];
+
+    console.log("Checking for new messages for users:", selectedUsers);
+
+    for (const username of selectedUsers) {
+        const userId = predefinedUsers[username];
+        console.log(`Processing user: ${username}, userId: ${userId}`);
+
+        try {
+            const messages = await fetchUserMessages(userId);
+            if (messages.length > 0) {
+                const latestMessage = messages[0];
+                const messageId = latestMessage._id;
+
+                const communityId = latestMessage.details.community?.id;
+                console.log("Community ID for fetching emojis:", communityId);
+
+                await fetchEmojis(communityId);
+
+                if (lastMessageIds[username] !== messageId) {
+                    await createNotification(latestMessage, username);
+                    lastMessageIds[username] = messageId;
+                    console.log(`Notification sent for user ${username}, messageId: ${messageId}`);
+                } else {
+                    console.log(`No new messages for user ${username}; messageId: ${messageId} already shown.`);
                 }
+            } else {
+                console.log(`No new messages for userId ${userId}.`);
             }
-        });
-    });
+        } catch (error) {
+            console.error(`Error fetching messages for user ${username}:`, error);
+        }
+    }
 }
 
 let previousMotdTimestamps = {};

@@ -68,11 +68,11 @@ document.addEventListener('DOMContentLoaded', function () {
             const username = checkbox.getAttribute('data-username');
             const checkedBoxes = Array.from(userCheckboxes).filter(box => box.checked);
 
-            if (checkedBoxes.length > 4) {
+            if (checkedBoxes.length > 5) {
                 event.target.checked = false;
-                alert("You can select a maximum of 4 users.");
+                alert("You can select a maximum of 5 users.");
             } else {
-                document.getElementById('userCount').textContent = `Selected Users: ${checkedBoxes.length}/4`;
+                document.getElementById('userCount').textContent = `Selected Users: ${checkedBoxes.length}/5`;
 
                 if (event.target.checked) {
                     console.log(`User added: ${username}`);
@@ -182,6 +182,13 @@ patchNotesLink.textContent = "Release Notes";
 patchNotesLink.target = "_blank";
 patchNotesLink.rel = "noopener noreferrer";
 footer.appendChild(patchNotesLink);
+footer.appendChild(document.createTextNode(' | '));
+const githubLink = document.createElement('a');
+githubLink.href = "https://github.com/f4sh/Spectrum-CIG-Tracker";
+githubLink.textContent = "GitHub";
+githubLink.target = "_blank";
+githubLink.rel = "noopener noreferrer";
+footer.appendChild(githubLink);
 footer.appendChild(document.createElement('br'));
 const chromeAddonLink = document.createElement('a');
 chromeAddonLink.href = "https://chromewebstore.google.com/detail/spectrum-cig-tracker/nfnjlibnekbfphhnempobclhhgnablaj";

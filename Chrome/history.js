@@ -9,17 +9,20 @@ const predefinedUsers = {
     'Yogiklatt-CIG': 287195,
     'Wintermute-CIG': 3880356,
     'XLB-CIG': 3126689,
-    'Soulcrusher-CIG': 4490
+    'Soulcrusher-CIG': 4490,
+    'Armeggadon-CIG': 4392587
 };
 
 let currentPage = 1;
 const itemsPerPage = 5;
 let currentDeveloperFilter = 'all';
 let currentMessageTypeFilter = 'all';
+let currentDateFilter = 'all';
 
 document.addEventListener('DOMContentLoaded', () => {
     populateDeveloperDropdown();
     setupMessageTypeFilter();
+    setupDateFilter();
     loadHistory();
 });
 
@@ -61,13 +64,25 @@ function setupMessageTypeFilter() {
     });
 }
 
+function setupDateFilter() {
+    const dateFilter = document.getElementById('dateFilter'); // Assume there's a dropdown for date filtering
+    dateFilter.innerHTML = '<option value="all">All Days</option><option value="today">Today</option><option value="yesterday">Yesterday</option>';
+
+    dateFilter.addEventListener('change', () => {
+        currentDateFilter = dateFilter.value;
+        currentPage = 1;
+        loadHistory();
+    });
+}
+
 function loadHistory() {
     chrome.storage.local.get('notificationsHistory', (result) => {
         const history = result.notificationsHistory || [];
-        history.sort((a, b) => new Date(b.timeCreated) - new Date(a.timeCreated));
+        history.sort((a, b) => new Date(b.timeCreated) - new Date(a.timeCreated)); // Sort by date descending
 
         const filteredHistory = filterHistoryByDeveloperAndType(history);
-        const totalPages = Math.ceil(filteredHistory.length / itemsPerPage);
+        const dateFilteredHistory = filterHistoryByDate(filteredHistory); // Apply date filter
+        const totalPages = Math.ceil(dateFilteredHistory.length / itemsPerPage);
         const historyContainer = document.getElementById('historyContainer');
         const paginationContainer = document.getElementById('paginationContainer');
 
@@ -75,7 +90,7 @@ function loadHistory() {
 
         const start = (currentPage - 1) * itemsPerPage;
         const end = start + itemsPerPage;
-        const itemsToShow = filteredHistory.slice(start, end);
+        const itemsToShow = dateFilteredHistory.slice(start, end);
 
         itemsToShow.forEach(notification => {
             const item = document.createElement('div');
@@ -132,7 +147,6 @@ function formatMessage(message) {
         .replace(/\n/g, '<br>');
 }
 
-
 function filterHistoryByDeveloperAndType(history) {
     return history.filter(notification => {
         const developerMatch = (currentDeveloperFilter === 'all' || notification.username === currentDeveloperFilter);
@@ -143,5 +157,29 @@ function filterHistoryByDeveloperAndType(history) {
             (currentMessageTypeFilter === 'all' && notification.username === 'MoTD')
         );
         return developerMatch && messageTypeMatch;
+    });
+}
+
+function filterHistoryByDate(history) {
+    const now = new Date();
+    return history.filter(notification => {
+        const notificationDate = new Date(notification.timeCreated);
+
+        if (currentDateFilter === 'today') {
+            return (
+                notificationDate.getFullYear() === now.getFullYear() &&
+                notificationDate.getMonth() === now.getMonth() &&
+                notificationDate.getDate() === now.getDate()
+            );
+        } else if (currentDateFilter === 'yesterday') {
+            const yesterday = new Date(now);
+            yesterday.setDate(now.getDate() - 1);
+            return (
+                notificationDate.getFullYear() === yesterday.getFullYear() &&
+                notificationDate.getMonth() === yesterday.getMonth() &&
+                notificationDate.getDate() === yesterday.getDate()
+            );
+        }
+        return true;
     });
 }

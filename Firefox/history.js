@@ -9,7 +9,8 @@ const predefinedUsers = {
     'Yogiklatt-CIG': 287195,
     'Wintermute-CIG': 3880356,
     'XLB-CIG': 3126689,
-    'Soulcrusher-CIG': 4490
+    'Soulcrusher-CIG': 4490,
+    'Armeggadon-CIG': 4392587
 };
 
 let currentPage = 1;

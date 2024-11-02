@@ -482,19 +482,38 @@ function formatMessageWithEmojis(message, communityId) {
     return message;
 }
 
+function createStandardNotification(message, username, avatarUrl, details) {
+    const notificationOptions = {
+        type: "basic",
+        iconUrl: avatarUrl || 'icons/icon-48.png',
+        title: `${username} says:`,
+        message: message,
+        priority: 2
+    };
+
+    chrome.notifications.create(`${username}-${Date.now()}`, notificationOptions);
+}
+
 async function createNotification(message, username, avatarUrl = null) {
     const source = message._source;
     const details = message.details;
 
+    console.log("Message details:", JSON.stringify(details, null, 2));
+
     const communityId = details.community?.id;
-    if (!communityId) {
-        console.error("Community ID is undefined. Cannot fetch emojis.");
-        return;
+    let formattedMessage;
+
+    if (username === "MoTD") {
+        formattedMessage = formatMessageWithEmojis(source.body, null);
+    } else {
+        if (!communityId) {
+            console.error("Community ID is undefined. Cannot fetch emojis.");
+            formattedMessage = formatMessageWithEmojis(source.body, null);
+        } else {
+            await fetchEmojis(communityId);
+            formattedMessage = formatMessageWithEmojis(source.body, communityId);
+        }
     }
-
-    await fetchEmojis(communityId);
-
-    let formattedMessage = formatMessageWithEmojis(source.body, communityId);
 
     const notificationAvatarUrl = avatarUrl || details?.member?.avatar || 'icons/icon-48.png';
     const timeCreated = username === "MoTD" ? new Date(details.last_modified * 1000).toLocaleString() : new Date(source.time_created).toLocaleString();
@@ -622,7 +641,11 @@ async function checkForNewMessages() {
                 const communityId = latestMessage.details.community?.id;
                 console.log("Community ID for fetching emojis:", communityId);
 
-                await fetchEmojis(communityId);
+                if (communityId) {
+                    await fetchEmojis(communityId);
+                } else {
+                    console.warn(`Community ID is undefined for user ${username}.`);
+                }
 
                 if (lastMessageIds[username] !== messageId) {
                     await createNotification(latestMessage, username);
@@ -677,6 +700,7 @@ let motdTrackingEnabled = false;
 
 function startMotdTracking() {
     if (!motdInterval && motdTrackingEnabled && trackingInterval) {
+        console.log("Starting MoTD tracking.");
         motdInterval = setInterval(checkForMotdUpdates, motdCheckInterval);
         console.log(`Started MoTD tracking at an interval of ${motdCheckInterval / 1000} seconds.`);
     }
@@ -697,7 +721,11 @@ async function checkForMotdUpdates() {
     ];
 
     for (const lobby of lobbies) {
-        await fetchMotd(lobby.id, lobby.name);
+        try {
+            await fetchMotd(lobby.id, lobby.name);
+        } catch (error) {
+            console.error(`Error fetching MoTD for lobby ${lobby.name}:`, error.message);
+        }
     }
 }
 
@@ -750,10 +778,12 @@ async function fetchMotd(lobbyId, lobbyName) {
 
             const motdMessage = data.data?.motd?.message;
             const lastModified = data.data?.motd?.last_modified;
+            const communityId = data.data?.motd?.community?.id;
+
             if (motdMessage && lastModified !== previousMotdTimestamps[lobbyId]) {
                 console.log(`New MoTD found for ${lobbyName}. Last modified: ${lastModified}`);
                 previousMotdTimestamps[lobbyId] = lastModified;
-                await sendMotdNotification(motdMessage, lobbyName, lastModified);
+                await sendMotdNotification(motdMessage, lobbyName, lastModified, communityId);
             } else {
                 console.log(`No new MoTD for ${lobbyName} or already up-to-date.`);
             }
@@ -765,7 +795,7 @@ async function fetchMotd(lobbyId, lobbyName) {
     }
 }
 
-async function sendMotdNotification(message, lobbyName, lastModified) {
+async function sendMotdNotification(message, lobbyName, lastModified, communityId) {
     const notificationId = `motd-${lobbyName}-${lastModified}`;
     const defaultAvatarUrl = chrome.runtime.getURL("icons/icon-48.png");
 
@@ -791,6 +821,7 @@ async function sendMotdNotification(message, lobbyName, lastModified) {
                 member: { nickname: 'MoTD' },
                 lobby: { name: lobbyName },
                 community: { slug: 'SC' },
+                communityId,
                 last_modified: lastModified
             }
         };
@@ -926,7 +957,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                             chrome.storage.local.get('trackMotd', (result) => {
                                 if (result.trackMotd && !motdInterval) {
                                     startMotdTracking();
-                                    console.log("MoTD tracking started after user-initiated tracking start.");
+                                    console.log(`MoTD tracking started after user-initiated tracking start.`);
                                 }
                             });
 

@@ -9,7 +9,8 @@ const predefinedUsers = {
     'Yogiklatt-CIG': 287195,
     'Wintermute-CIG': 3880356,
     'XLB-CIG': 3126689,
-    'Soulcrusher-CIG': 4490
+    'Soulcrusher-CIG': 4490,
+    'Armeggadon-CIG': 4392587
 };
 
 let trackingInterval = null;
@@ -166,7 +167,10 @@ async function openSpectrumLoginPage() {
     if (isRedirecting || spectrumTabId) return;
     isRedirecting = true;
 
-    const tab = await browser.tabs.create({ url: 'https://robertsspaceindustries.com/connect?jumpto=/spectrum/community/SC' });
+    const tab = await browser.tabs.create({
+        url: 'https://robertsspaceindustries.com/connect?jumpto=/spectrum/community/SC',
+        active: false
+    });
     if (tab && tab.id) {
         spectrumTabId = tab.id;
         console.log("Opened Spectrum login page, waiting for redirection.");
@@ -227,25 +231,34 @@ async function openAndCloseMainRSIPage() {
 
     isRSITabOpened = true;
 
-    const tab = await browser.tabs.create({ url: 'https://robertsspaceindustries.com/' });
-    rsiTabId = tab.id;
-    console.log("Opened RSI main page to gather cookies.");
+    const tabs = await browser.tabs.query({ url: 'https://robertsspaceindustries.com/*' });
+    if (tabs.length > 0) {
+        rsiTabId = tabs[0].id;
+        console.log("Reusing open RSI tab with ID:", rsiTabId);
 
-    browser.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
-        if (tabId === rsiTabId && changeInfo.status === "complete") {
-            console.log("Main RSI page fully loaded; gathering cookies.");
+        browser.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
+            if (tabId === rsiTabId && changeInfo.status === "complete") {
+                console.log("Existing RSI tab fully loaded; monitoring cookies.");
+                monitorCookies();
+                browser.tabs.onUpdated.removeListener(listener);
+            }
+        });
+    } else {
+        const tab = await browser.tabs.create({
+            url: 'https://robertsspaceindustries.com/',
+            active: false
+        });
+        rsiTabId = tab.id;
+        console.log("Opened RSI page to gather cookies.");
 
-            monitorCookies();
-
-            browser.tabs.remove(rsiTabId).then(() => {
-                console.log("Closed RSI main page after cookie gathering.");
-                rsiTabId = null;
-                isRSITabOpened = false;
-            });
-
-            browser.tabs.onUpdated.removeListener(listener);
-        }
-    });
+        browser.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
+            if (tabId === rsiTabId && changeInfo.status === "complete") {
+                console.log("New RSI tab fully loaded; monitoring cookies.");
+                monitorCookies();
+                browser.tabs.onUpdated.removeListener(listener);
+            }
+        });
+    }
 }
 
 function stopTrackingService() {
@@ -391,6 +404,77 @@ async function clearCookies() {
     });
 }
 
+let emojiMap = {};
+let avocadoEmojiMap = {};
+
+const hardcodedEmojis = {
+    ':space_invader:': '👾',
+    ':rocket:': '🚀',
+    ':green_circle:': '🟢',
+    ':red_circle:': '🔴',
+    ':fire:': '🔥',
+    ':pizza:': '🍕',
+    ':tophat:': '🎩',
+    ':monocle_face:': '🧐'
+};
+
+async function fetchEmojis(communityId) {
+    console.log(`Fetching emojis for community ID: ${communityId}...`);
+
+    const cookies = await getRSICookies();
+    const rsiToken = cookies ? cookies.rsiToken : null;
+
+    const response = await fetch("https://robertsspaceindustries.com/api/spectrum/community/fetch-emojis", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "x-rsi-token": rsiToken,
+            "x-tavern-id": generateTavernId()
+        },
+        body: JSON.stringify({ community_id: communityId })
+    });
+
+    if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+            if (communityId === "1") {
+                emojiMap = {};
+            } else if (communityId === "9711") {
+                avocadoEmojiMap = {};
+            }
+            data.data.forEach(emoji => {
+                if (communityId === "1") {
+                    emojiMap[`:${emoji.short_name}:`] = emoji.media_url;
+                } else if (communityId === "9711") {
+                    avocadoEmojiMap[`:${emoji.short_name}:`] = emoji.media_url;
+                }
+            });
+            console.log("Emojis fetched successfully:", communityId === "1" ? emojiMap : avocadoEmojiMap);
+        } else {
+            console.error("Error fetching emojis:", data.msg);
+        }
+    } else {
+        console.error("Failed to fetch emojis:", response.statusText);
+    }
+}
+
+function formatMessageWithEmojis(message, communityId) {
+    const currentEmojiMap = communityId === "1" ? emojiMap : avocadoEmojiMap;
+
+    for (const [emoticon, url] of Object.entries(currentEmojiMap)) {
+        const regex = new RegExp(emoticon, 'g');
+        message = message.replace(regex, `<img src="${url}" alt="${emoticon}" class="emoticon">`);
+    }
+
+    for (const [emoticon, emoji] of Object.entries(hardcodedEmojis)) {
+        const regex = new RegExp(emoticon, 'g');
+        message = message.replace(regex, emoji);
+    }
+
+    return message;
+}
+
 async function createNotification(message, username, avatarUrl = null) {
     const source = message._source;
     const details = message.details;
@@ -424,68 +508,66 @@ async function createNotification(message, username, avatarUrl = null) {
 
     contextMessage = username === "MoTD" ? `Updated on: ${timeCreated}` : `Posted on: ${timeCreated} in ${lobbyName}`;
 
+    const formattedMessage = formatMessageWithEmojis(source.body, details.community.id);
+
     const notificationOptions = {
         type: "basic",
         iconUrl: notificationAvatarUrl,
         title: titleText,
-        message: source.body,
+        message: formattedMessage,
         contextMessage: contextMessage,
         priority: 2
     };
 
-    browser.notifications.create(messageId, notificationOptions).then((notificationId) => {
-        console.log(`Notification created for messageId: ${messageId}, username: ${username}`);
+    const notificationId = await browser.notifications.create(messageId, notificationOptions);
+    console.log(`Notification created for messageId: ${messageId}, username: ${username}`);
 
-        browser.storage.local.get(['notificationsHistory', 'notificationsShown', 'notificationsClicked']).then((stats) => {
-            let shownCount = (stats.notificationsShown || 0) + 1;
-            browser.storage.local.set({ notificationsShown: shownCount });
+    const stats = await browser.storage.local.get(['notificationsHistory', 'notificationsShown', 'notificationsClicked']);
+    let shownCount = (stats.notificationsShown || 0) + 1;
+    await browser.storage.local.set({ notificationsShown: shownCount });
 
-            let history = stats.notificationsHistory || [];
-            const newNotification = {
-                notificationId,
-                username,
-                avatarUrl: notificationAvatarUrl,
-                timeCreated,
-                lobbyName,
-                messageLink,
-                body: source.body,
-                title: notificationOptions.title
-            };
+    let history = stats.notificationsHistory || [];
+    const newNotification = {
+        notificationId,
+        username,
+        avatarUrl: notificationAvatarUrl,
+        timeCreated,
+        lobbyName,
+        messageLink,
+        body: formattedMessage,
+        title: notificationOptions.title
+    };
 
-            if (history.length >= 50) {
-                history.shift();
-                console.log("Oldest notification removed from history.");
-            }
-            history.push(newNotification);
-            browser.storage.local.set({ notificationsHistory: history }).then(() => {
-                console.log("Notification added to history:", newNotification);
-            });
-        });
+    if (history.length >= 50) {
+        history.shift();
+        console.log("Oldest notification removed from history.");
+    }
+    history.push(newNotification);
+    await browser.storage.local.set({ notificationsHistory: history });
+    console.log("Notification added to history:", newNotification);
 
-        if (username !== "MoTD" && messageLink) {
-            browser.notifications.onClicked.addListener(function listener(id) {
-                if (id === notificationId) {
-                    browser.storage.local.get('notificationsClicked').then((stats) => {
-                        let clickedCount = (stats.notificationsClicked || 0) + 1;
-                        browser.storage.local.set({ notificationsClicked: clickedCount });
-                        console.log(`Notification clicked for messageId: ${messageId}`);
+    if (username !== "MoTD" && messageLink) {
+        const listener = async (id) => {
+            if (id === notificationId) {
+                const stats = await browser.storage.local.get('notificationsClicked');
+                let clickedCount = (stats.notificationsClicked || 0) + 1;
+                await browser.storage.local.set({ notificationsClicked: clickedCount });
+                console.log(`Notification clicked for messageId: ${messageId}`);
 
-                        browser.tabs.query({ url: messageLink }).then((tabs) => {
-                            if (tabs.length > 0) {
-                                browser.tabs.update(tabs[0].id, { active: true });
-                                console.log(`Focused existing tab for messageId: ${messageId}`);
-                            } else {
-                                browser.tabs.create({ url: messageLink });
-                                console.log(`Opened new tab for messageId: ${messageId}`);
-                            }
-                        });
-
-                        browser.notifications.onClicked.removeListener(listener);
-                    });
+                const tabs = await browser.tabs.query({ url: messageLink });
+                if (tabs.length > 0) {
+                    await browser.tabs.update(tabs[0].id, { active: true });
+                    console.log(`Focused existing tab for messageId: ${messageId}`);
+                } else {
+                    await browser.tabs.create({ url: messageLink });
+                    console.log(`Opened new tab for messageId: ${messageId}`);
                 }
-            });
-        }
-    });
+
+                browser.notifications.onClicked.removeListener(listener);
+            }
+        };
+        browser.notifications.onClicked.addListener(listener);
+    }
 }
 
 const lastMessageIds = {};
@@ -514,7 +596,6 @@ async function checkForNewMessages() {
 
                     if (lastMessageIds[username] !== messageId) {
                         await createNotification(latestMessage, username);
-
                         lastMessageIds[username] = messageId;
                         console.log(`Notification sent for user ${username}, messageId: ${messageId}`);
                     } else {

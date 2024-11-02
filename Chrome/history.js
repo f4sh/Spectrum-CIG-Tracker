@@ -132,6 +132,8 @@ function loadHistory() {
 }
 
 function formatMessage(message) {
+    message = message.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="notification-link">$1</a>');
+
     return message
         .replace(/(Audience: )/g, `<br><br><strong>Audience:</strong> `)
         .replace(/(Alpha Patch [\d.]+):/g, `<strong>$1:</strong><br>`)

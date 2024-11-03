@@ -10,7 +10,9 @@ const predefinedUsers = {
     'Wintermute-CIG': 3880356,
     'XLB-CIG': 3126689,
     'Soulcrusher-CIG': 4490,
-    'Armeggadon-CIG': 4392587
+    'Armeggadon-CIG': 4392587,
+    'Swift-CIG': 3377,
+    'Proxus-CIG': 478
 };
 
 let trackingInterval = null;
@@ -579,7 +581,7 @@ async function createNotification(message, username, avatarUrl = null) {
                 title: notificationOptions.title
             };
 
-            if (history.length >= 50) {
+            if (history.length >= 100) {
                 history.shift();
                 console.log("Oldest notification removed from history.");
             }

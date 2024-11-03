@@ -10,7 +10,9 @@ const predefinedUsers = {
     'Wintermute-CIG': 3880356,
     'XLB-CIG': 3126689,
     'Soulcrusher-CIG': 4490,
-    'Armeggadon-CIG': 4392587
+    'Armeggadon-CIG': 4392587,
+    'Swift-CIG': 3377,
+    'Proxus-CIG': 478
 };
 
 let currentPage = 1;
@@ -65,7 +67,7 @@ function setupMessageTypeFilter() {
 }
 
 function setupDateFilter() {
-    const dateFilter = document.getElementById('dateFilter'); // Assume there's a dropdown for date filtering
+    const dateFilter = document.getElementById('dateFilter');
     dateFilter.innerHTML = '<option value="all">All Days</option><option value="today">Today</option><option value="yesterday">Yesterday</option>';
 
     dateFilter.addEventListener('change', () => {
@@ -78,15 +80,22 @@ function setupDateFilter() {
 function loadHistory() {
     chrome.storage.local.get('notificationsHistory', (result) => {
         const history = result.notificationsHistory || [];
-        history.sort((a, b) => new Date(b.timeCreated) - new Date(a.timeCreated)); // Sort by date descending
+
+        history.sort((a, b) => new Date(b.timeCreated) - new Date(a.timeCreated));
 
         const filteredHistory = filterHistoryByDeveloperAndType(history);
-        const dateFilteredHistory = filterHistoryByDate(filteredHistory); // Apply date filter
+        const dateFilteredHistory = filterHistoryByDate(filteredHistory);
         const totalPages = Math.ceil(dateFilteredHistory.length / itemsPerPage);
         const historyContainer = document.getElementById('historyContainer');
         const paginationContainer = document.getElementById('paginationContainer');
 
         historyContainer.innerHTML = '';
+
+        if (dateFilteredHistory.length === 0) {
+            historyContainer.innerHTML = '<p>No history available.</p>';
+            paginationContainer.innerHTML = '';
+            return;
+        }
 
         const start = (currentPage - 1) * itemsPerPage;
         const end = start + itemsPerPage;
@@ -129,6 +138,30 @@ function loadHistory() {
             paginationContainer.appendChild(pageButton);
         }
     });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    populateDeveloperDropdown();
+    setupMessageTypeFilter();
+    setupDateFilter();
+    loadHistory();
+
+    const clearHistoryButton = document.getElementById('clearHistoryButton');
+    clearHistoryButton.addEventListener('click', () => {
+        clearHistory();
+    });
+});
+
+function clearHistory() {
+    const userConfirmed = confirm("Are you sure you want to delete the history? This action cannot be undone.");
+    if (userConfirmed) {
+        chrome.storage.local.remove('notificationsHistory', () => {
+            console.log("Notification history cleared.");
+            loadHistory();
+        });
+    } else {
+        console.log("History deletion canceled by the user.");
+    }
 }
 
 function formatMessage(message) {

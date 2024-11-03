@@ -130,6 +130,31 @@
             gap: 5px;
         }
 
+        button[type="submit"],
+        button[type="button"] {
+            cursor: pointer;
+            background-color: #1e3444;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 10px 15px;
+            font-size: 14px;
+            transition: background-color 0.3s, transform 0.1s;
+            width: 100%;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        button[type="submit"]:hover,
+        button[type="button"]:hover {
+            background-color: #1d9aeb;
+        }
+
+        button[type="submit"]:active,
+        button[type="button"]:active {
+            background-color: #163d59;
+            transform: translateY(2px);
+        }
+
         .page-button {
             background-color: #1a587d;
             color: white;
@@ -196,6 +221,7 @@
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
         </select>
+        <button type="button" id="clearHistoryButton">Clear History</button>
     </div>
     <div class="notification-container" id="historyContainer"></div>
     <div id="paginationContainer"></div>

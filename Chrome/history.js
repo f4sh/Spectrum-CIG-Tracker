@@ -121,6 +121,7 @@ function loadHistory() {
                 </div>
                 <div class="notification-body">${formattedBody}</div>
                 ${notification.username !== "MoTD" ? `<a href="${notification.messageLink}" target="_blank" class="notification-link">View Message</a>` : ''}
+                <a href="#" class="copy-link" data-username="${notification.username}" data-lobby="${notification.lobbyName}" data-time="${notification.timeCreated}" data-body="${notification.body}">Copy Message</a>
             `;
             historyContainer.appendChild(item);
         });
@@ -137,6 +138,33 @@ function loadHistory() {
             });
             paginationContainer.appendChild(pageButton);
         }
+
+        document.querySelectorAll('.copy-link').forEach(link => {
+            link.addEventListener('click', (event) => {
+                event.preventDefault();
+                copyNotification(event.target);
+            });
+        });
+    });
+}
+function copyNotification(element) {
+    const username = element.getAttribute('data-username');
+    const lobby = element.getAttribute('data-lobby');
+    const timeCreated = element.getAttribute('data-time');
+    const body = element.getAttribute('data-body');
+
+    const formattedText = `
+\`\`\`
+${body}
+\`\`\`
+~ ${username} in ${lobby} ${timeCreated}
+    `;
+
+    navigator.clipboard.writeText(formattedText.trim()).then(() => {
+        alert("Message copied to clipboard!");
+        console.log("Message copied:", formattedText);
+    }).catch(err => {
+        console.error("Error copying message:", err);
     });
 }
 
@@ -165,7 +193,7 @@ function clearHistory() {
 }
 
 function formatMessage(message) {
-    message = message.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="notification-link">$1</a>');
+    message = message.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="notification-url">$1</a>');
 
     return message
         .replace(/(Audience: )/g, `<br><br><strong>Audience:</strong> `)

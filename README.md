@@ -9,7 +9,7 @@ Spectrum CIG Tracker is available for **Firefox**, **Chrome**, and other Chromiu
 - Firefox Add-ons Store: [Spectrum CIG Tracker for Firefox](https://addons.mozilla.org/en-US/firefox/addon/spectrum-cig-tracker/)
 - Chrome Web Store: [Spectrum CIG Tracker for Chrome](https://chromewebstore.google.com/detail/spectrum-cig-tracker/nfnjlibnekbfphhnempobclhhgnablaj)
 
-![CIG-Message-Tracker-_extension_chrome-store](https://github.com/user-attachments/assets/dec96fd3-97a2-43ee-9904-b0adafd231ea)
+![CIG-Message-Tracker-_extension_chrome-store](https://github.com/user-attachments/assets/78eefac0-3e29-4ca1-98a7-867ae5a04651)
 
 ### Key Features:
 - **Real-Time Notifications for Developers & MoTD**: Receive instant desktop alerts whenever tracked developers post on Spectrum, or whenever the **Message of the Day (MoTD)** is updated. Spectrum CIG Tracker keeps you connected without the need to constantly refresh Spectrum.

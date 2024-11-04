@@ -10,7 +10,9 @@ const predefinedUsers = {
     'Wintermute-CIG': 3880356,
     'XLB-CIG': 3126689,
     'Soulcrusher-CIG': 4490,
-    'Armeggadon-CIG': 4392587
+    'Armeggadon-CIG': 4392587,
+    'Swift-CIG': 3377,
+    'Proxus-CIG': 478
 };
 
 let trackingInterval = null;
@@ -394,14 +396,9 @@ async function fetchUserMessages(userId, retryCount = 0) {
 }
 
 async function clearCookies() {
-    return new Promise((resolve) => {
-        browser.cookies.remove({ url: 'https://robertsspaceindustries.com', name: 'Rsi-Token' }).then(() => {
-            browser.cookies.remove({ url: 'https://robertsspaceindustries.com', name: 'Rsi-XSRF' }).then(() => {
-                console.log("Cleared RSI cookies.");
-                resolve();
-            });
-        });
-    });
+    await browser.cookies.remove({ url: 'https://robertsspaceindustries.com', name: 'Rsi-Token' });
+    await browser.cookies.remove({ url: 'https://robertsspaceindustries.com', name: 'Rsi-XSRF' });
+    console.log("Cleared RSI cookies.");
 }
 
 let emojiMap = {};
@@ -444,11 +441,8 @@ async function fetchEmojis(communityId) {
                 avocadoEmojiMap = {};
             }
             data.data.forEach(emoji => {
-                if (communityId === "1") {
-                    emojiMap[`:${emoji.short_name}:`] = emoji.media_url;
-                } else if (communityId === "9711") {
-                    avocadoEmojiMap[`:${emoji.short_name}:`] = emoji.media_url;
-                }
+                const map = communityId === "1" ? emojiMap : avocadoEmojiMap;
+                map[`:${emoji.short_name}:`] = emoji.media_url;
             });
             console.log("Emojis fetched successfully:", communityId === "1" ? emojiMap : avocadoEmojiMap);
         } else {
@@ -478,7 +472,6 @@ function formatMessageWithEmojis(message, communityId) {
 async function createNotification(message, username, avatarUrl = null) {
     const source = message._source;
     const details = message.details;
-
     const notificationAvatarUrl = avatarUrl || details?.member?.avatar || 'icons/icon-48.png';
     const timeCreated = username === "MoTD" ? new Date(details.last_modified * 1000).toLocaleString() : new Date(source.time_created).toLocaleString();
     const messageId = message._id;
@@ -538,7 +531,7 @@ async function createNotification(message, username, avatarUrl = null) {
         title: notificationOptions.title
     };
 
-    if (history.length >= 50) {
+    if (history.length >= 100) {
         history.shift();
         console.log("Oldest notification removed from history.");
     }
@@ -578,38 +571,50 @@ async function checkForNewMessages() {
         return;
     }
 
-    try {
-        const selectedUsersResult = await browser.storage.local.get('selectedUsers');
-        const selectedUsers = selectedUsersResult.selectedUsers || [];
+    const selectedUsersResult = await browser.storage.local.get('selectedUsers');
+    const selectedUsers = selectedUsersResult.selectedUsers || [];
 
-        console.log("Checking for new messages for users:", selectedUsers);
+    console.log("Checking for new messages for users:", selectedUsers);
 
-        for (const username of selectedUsers) {
-            const userId = predefinedUsers[username];
-            console.log(`Processing user: ${username}, userId: ${userId}`);
+    for (const username of selectedUsers) {
+        const userId = predefinedUsers[username];
+        console.log(`Processing user: ${username}, userId: ${userId}`);
 
-            try {
-                const messages = await fetchUserMessages(userId);
-                if (messages.length > 0) {
-                    const latestMessage = messages[0];
-                    const messageId = latestMessage._id;
+        try {
+            const messages = await fetchUserMessages(userId);
+            if (messages.length > 0) {
+                for (const message of messages) {
+                    const messageId = message._id;
+                    const messageType = determineMessageType(message);
 
-                    if (lastMessageIds[username] !== messageId) {
-                        await createNotification(latestMessage, username);
-                        lastMessageIds[username] = messageId;
-                        console.log(`Notification sent for user ${username}, messageId: ${messageId}`);
+                    if (!lastMessageIds[messageType]) lastMessageIds[messageType] = {};
+
+                    if (lastMessageIds[messageType][username] !== messageId) {
+                        await createNotification(message, username);
+                        lastMessageIds[messageType][username] = messageId;
+                        console.log(`Notification sent for user ${username}, messageId: ${messageId}, type: ${messageType}`);
                     } else {
-                        console.log(`No new messages for user ${username}; messageId: ${messageId} already shown.`);
+                        console.log(`No new ${messageType} messages for user ${username}; messageId: ${messageId} already shown.`);
                     }
-                } else {
-                    console.log(`No new messages for userId ${userId}.`);
                 }
-            } catch (error) {
-                console.error(`Error fetching messages for user ${username}:`, error);
+            } else {
+                console.log(`No new messages for userId ${userId}.`);
             }
+        } catch (error) {
+            console.error(`Error fetching messages for user ${username}:`, error);
         }
-    } catch (error) {
-        console.error("Error accessing storage for selectedUsers:", error);
+    }
+}
+
+function determineMessageType(message) {
+    if (message._index === 'tavern_forum_thread_op' || message._index === 'tavern_forum_thread_reply') {
+        return 'thread';
+    } else if (message._index === 'tavern_message') {
+        return 'chat';
+    } else if (message.details?.member?.nickname === 'MoTD') {
+        return 'motd';
+    } else {
+        return 'chat';
     }
 }
 
@@ -773,11 +778,62 @@ async function sendMotdNotification(message, lobbyName, lastModified) {
     });
 }
 
+async function initializeTracking() {
+    const result = await browser.storage.local.get(['selectedUsers', 'interval', 'tracking', 'trackMotd']);
+    const intervalMinutes = result.interval / 60 || 1;
+
+    loginNotificationShown = false;
+    isLoginEnsured = false;
+    loginTabId = null;
+
+    await openSpectrumLoginPage().then(() => {
+        ensureRSILogin().then(async () => {
+            console.log("Login ensured for tracking.");
+
+            await openAndCloseMainRSIPage();
+
+            if (result.tracking) {
+                browser.alarms.create("messageCheckAlarm", { periodInMinutes: intervalMinutes });
+                console.log("Tracking started/resumed with alarm set at", intervalMinutes, "minute(s).");
+
+                if (result.trackMotd) {
+                    startMotdTracking();
+                    console.log("MoTD tracking started/resumed.");
+                }
+            }
+        });
+    });
+}
+
+browser.runtime.onStartup.addListener(async () => {
+    console.log("Browser startup detected. Initializing tracking...");
+    await initializeTracking();
+});
+
+browser.runtime.onInstalled.addListener(async (details) => {
+    if (details.reason === 'update') {
+        console.log("Extension updated. Reinitializing tracking...");
+
+        const { tracking } = await browser.storage.local.get('tracking');
+        if (tracking) {
+            console.log("Tracker was active before the update. Restarting tracking...");
+            await initializeTracking();
+        }
+    }
+});
+
+browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === "messageCheckAlarm") {
+        console.log("Alarm triggered for checkForNewMessages.");
+        checkForNewMessages();
+    }
+});
+
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'startTracking') {
         const intervalMinutes = message.interval / 60;
 
-        browser.alarms.clear("messageCheckAlarm");
+        browser.alarms.clear("messageCheckAlarm").catch(() => console.warn("No previous alarm to clear"));
         trackingInterval = null;
         loginNotificationShown = false;
         isLoginConfirmed = false;
@@ -788,7 +844,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         openSpectrumLoginPage().then(() => {
             console.log("Waiting for Spectrum login redirection confirmation...");
 
-            browser.tabs.onUpdated.addListener(function listener(tabId, changeInfo, tab) {
+            browser.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
                 if (tabId === spectrumTabId && changeInfo.status === "complete") {
                     browser.tabs.get(tabId).then(async (updatedTab) => {
                         if (updatedTab.url === "https://robertsspaceindustries.com/spectrum/community/SC") {
@@ -798,7 +854,6 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
                             await openAndCloseMainRSIPage();
 
                             isLoginConfirmed = true;
-
                             browser.alarms.create("messageCheckAlarm", { periodInMinutes: intervalMinutes });
                             console.log(`Tracking messages started with alarm set to ${intervalMinutes} minute(s).`);
 
@@ -819,100 +874,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
 
         sendResponse({ success: true });
-    } else if (message.action === 'stopTracking') {
-        browser.alarms.clear("messageCheckAlarm");
-        stopTrackingService();
-        sendResponse({ success: true });
-    } else if (message.action === 'changeInterval') {
-        const newIntervalMinutes = message.interval / 60;
 
-        browser.alarms.clear("messageCheckAlarm");
-        browser.alarms.create("messageCheckAlarm", { periodInMinutes: newIntervalMinutes });
-        console.log(`Changed tracking interval to ${newIntervalMinutes} minute(s).`);
-
-        sendResponse({ success: true });
-    }
-});
-
-browser.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === "messageCheckAlarm") {
-        console.log("Alarm triggered for checkForNewMessages.");
-        checkForNewMessages();
-    }
-});
-
-browser.runtime.onStartup.addListener(async () => {
-    try {
-        const result = await browser.storage.local.get(['selectedUsers', 'interval', 'tracking']);
-        const interval = result.interval || 60;
-
-        loginNotificationShown = false;
-        isLoginEnsured = false;
-        loginTabId = null;
-
-        const cookies = await getRSICookies();
-        if (!cookies && !loginNotificationShown) {
-            await notifyUserToLogIn();
-            loginNotificationShown = true;
-        }
-
-        if (result.tracking) {
-            trackingInterval = setInterval(checkForNewMessages, interval * 1000);
-            console.log("Tracking resumed on startup at an interval of", interval, "seconds.");
-        }
-    } catch (error) {
-        console.error("Error during startup:", error);
-    }
-});
-
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'startTracking') {
-        const interval = message.interval * 1000;
-
-        clearInterval(trackingInterval);
-        trackingInterval = null;
-        loginNotificationShown = false;
-        isLoginConfirmed = false;
-        isRSITabOpened = false;
-        spectrumTabId = null;
-
-        openSpectrumLoginPage().then(() => {
-            console.log("Waiting for Spectrum login redirection confirmation...");
-
-            browser.tabs.onUpdated.addListener(function listener(tabId, changeInfo, tab) {
-                if (tabId === spectrumTabId && changeInfo.status === "complete") {
-                    browser.tabs.get(tabId).then(async (updatedTab) => {
-                        if (updatedTab.url === "https://robertsspaceindustries.com/spectrum/community/SC") {
-                            console.log("User redirected correctly to Spectrum; login confirmed.");
-
-                            closeRSILoginPage(spectrumTabId);
-
-                            await openAndCloseMainRSIPage();
-
-                            isLoginConfirmed = true;
-                            trackingInterval = setInterval(() => {
-                                checkForNewMessages();
-                            }, interval);
-
-                            console.log(`Tracking messages started at an interval of ${interval / 1000} seconds.`);
-
-                            browser.storage.local.get('trackMotd').then((result) => {
-                                if (result.trackMotd && !motdInterval) {
-                                    startMotdTracking();
-                                    console.log("MoTD tracking started after user-initiated tracking start.");
-                                }
-                            });
-
-                            browser.tabs.onUpdated.removeListener(listener);
-                        } else {
-                            console.log("Waiting for proper Spectrum redirection...");
-                        }
-                    });
-                }
-            });
-        });
-
-        sendResponse({ success: true });
     } else if (message.action === 'stopTracking') {
         if (trackingInterval) {
             clearInterval(trackingInterval);
@@ -921,6 +883,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         stopMotdTracking();
         sendResponse({ success: true });
+
     } else if (message.action === 'changeInterval') {
         if (trackingInterval) {
             clearInterval(trackingInterval);
@@ -929,5 +892,6 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }, message.interval * 1000);
             console.log(`Changed tracking interval to ${message.interval} seconds.`);
         }
+        sendResponse({ success: true });
     }
 });

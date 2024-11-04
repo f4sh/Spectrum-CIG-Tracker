@@ -101,14 +101,31 @@
             line-height: 1.4;
         }
 
-        .notification-link {
+        .notification-link,
+        .copy-link {
             font-size: 14px;
             color: #1d9aeb;
             text-decoration: none;
             overflow-wrap: anywhere;
         }
 
-        .notification-link:hover {
+        .notification-link:hover,
+        .copy-link:hover {
+            text-decoration: underline;
+        }
+
+        .notification-link {
+            margin-right: 10px;
+        }
+
+        .notification-url {
+            font-size: 14px;
+            color: #fff;
+            text-decoration: none;
+            overflow-wrap: anywhere;
+        }
+
+        .notification-url:hover {
             text-decoration: underline;
         }
 
@@ -128,6 +145,31 @@
             display: flex;
             justify-content: center;
             gap: 5px;
+        }
+
+        button[type="submit"],
+        button[type="button"] {
+            cursor: pointer;
+            background-color: #1e3444;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 10px 15px;
+            font-size: 14px;
+            transition: background-color 0.3s, transform 0.1s;
+            width: 100%;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        button[type="submit"]:hover,
+        button[type="button"]:hover {
+            background-color: #1d9aeb;
+        }
+
+        button[type="submit"]:active,
+        button[type="button"]:active {
+            background-color: #163d59;
+            transform: translateY(2px);
         }
 
         .page-button {
@@ -192,6 +234,12 @@
             <option value="chat">Chat</option>
             <option value="thread">Thread</option>
         </select>
+        <select id="dateFilter" class="styled-dropdown">
+            <option value="all">All Days</option>
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+        </select>
+        <button type="button" id="clearHistoryButton">Clear History</button>
     </div>
 
     <div class="notification-container" id="historyContainer"></div>

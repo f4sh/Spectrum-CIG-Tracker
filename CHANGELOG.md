@@ -15,7 +15,7 @@
 
 ## [1.4] - November 3, 2024
 
-> **Note for Firefox Users**: Version 1.4 was not published on Firefox. Firefox users will receive the features of both 1.4 and 1.5 in a combined 1.5 release.
+> **Note for Firefox Users**: Version 1.4 was not published on Firefox. Firefox users will receive the features of 1.3, 1.4 and 1.5 in a combined 1.5 release.
 
 ### New Features
 - **Clear History Button**: Allows users to erase all notification history with a single click.
@@ -29,6 +29,8 @@
 ---
 
 ## [1.3] - November 2, 2024
+
+> **Note for Firefox Users**: Version 1.3 was not published on Firefox. Firefox users will receive the features of 1.3 in a combined future release.
 
 ### Improvements
 - **Emoji Support**: Basic emojis frequently used by CIG are now supported, along with custom emojis from the sc-testing and etf communities.

@@ -10,17 +10,21 @@ const predefinedUsers = {
     'Wintermute-CIG': 3880356,
     'XLB-CIG': 3126689,
     'Soulcrusher-CIG': 4490,
-    'Armeggadon-CIG': 4392587
+    'Armeggadon-CIG': 4392587,
+    'Swift-CIG': 3377,
+    'Proxus-CIG': 478
 };
 
 let currentPage = 1;
-const itemsPerPage = 5;
+const itemsPerPage = 10;
 let currentDeveloperFilter = 'all';
 let currentMessageTypeFilter = 'all';
+let currentDateFilter = 'all';
 
 document.addEventListener('DOMContentLoaded', () => {
     populateDeveloperDropdown();
     setupMessageTypeFilter();
+    setupDateFilter();
     loadHistory();
 });
 
@@ -62,76 +66,62 @@ function setupMessageTypeFilter() {
     });
 }
 
+function setupDateFilter() {
+    const dateFilter = document.getElementById('dateFilter');
+    dateFilter.innerHTML = '<option value="all">All Days</option><option value="today">Today</option><option value="yesterday">Yesterday</option>';
+
+    dateFilter.addEventListener('change', () => {
+        currentDateFilter = dateFilter.value;
+        currentPage = 1;
+        loadHistory();
+    });
+}
+
 function loadHistory() {
     browser.storage.local.get('notificationsHistory').then((result) => {
         const history = result.notificationsHistory || [];
         history.sort((a, b) => new Date(b.timeCreated) - new Date(a.timeCreated));
 
         const filteredHistory = filterHistoryByDeveloperAndType(history);
-        const totalPages = Math.ceil(filteredHistory.length / itemsPerPage);
+        const dateFilteredHistory = filterHistoryByDate(filteredHistory);
+        const totalPages = Math.ceil(dateFilteredHistory.length / itemsPerPage);
         const historyContainer = document.getElementById('historyContainer');
         const paginationContainer = document.getElementById('paginationContainer');
 
         historyContainer.innerHTML = '';
-        paginationContainer.innerHTML = '';
+
+        if (dateFilteredHistory.length === 0) {
+            historyContainer.innerHTML = '<p>No history available.</p>';
+            paginationContainer.innerHTML = '';
+            return;
+        }
 
         const start = (currentPage - 1) * itemsPerPage;
         const end = start + itemsPerPage;
-        const itemsToShow = filteredHistory.slice(start, end);
+        const itemsToShow = dateFilteredHistory.slice(start, end);
 
         itemsToShow.forEach(notification => {
             const item = document.createElement('div');
             item.classList.add('notification-block');
 
-            const header = document.createElement('div');
-            header.classList.add('notification-header');
+            const formattedBody = formatMessage(notification.body);
 
-            if (notification.username !== "MoTD") {
-                const avatar = document.createElement('img');
-                avatar.src = notification.avatarUrl;
-                avatar.alt = notification.username;
-                avatar.classList.add('notification-avatar');
-                header.appendChild(avatar);
-            }
+            const usernameLink = notification.username !== "MoTD"
+                ? `<a href="https://robertsspaceindustries.com/spectrum/search?member=${encodeURIComponent(notification.username)}&page=1&q=&range=day&role&scopes=op%2Creply%2Cchat&sort=latest&visibility=nonerased" target="_blank" class="notification-username">${notification.username}</a>`
+                : notification.username;
 
-            const titleContainer = document.createElement('div');
-            const usernameElement = document.createElement('div');
-            usernameElement.classList.add('notification-title');
-
-            if (notification.username !== "MoTD") {
-                const usernameLink = document.createElement('a');
-                usernameLink.href = `https://robertsspaceindustries.com/spectrum/search?member=${encodeURIComponent(notification.username)}&page=1&q=&range=day&role&scopes=op%2Creply%2Cchat&sort=latest&visibility=nonerased`;
-                usernameLink.target = '_blank';
-                usernameLink.textContent = notification.username;
-                usernameLink.classList.add('notification-username');
-                usernameElement.appendChild(usernameLink);
-            } else {
-                usernameElement.textContent = notification.username;
-            }
-
-            const timeElement = document.createElement('div');
-            timeElement.classList.add('notification-time');
-            timeElement.textContent = `${notification.timeCreated} in ${notification.lobbyName}`;
-
-            titleContainer.appendChild(usernameElement);
-            titleContainer.appendChild(timeElement);
-            header.appendChild(titleContainer);
-            item.appendChild(header);
-
-            const body = document.createElement('div');
-            body.classList.add('notification-body');
-            body.appendChild(formatMessage(notification.body));
-            item.appendChild(body);
-
-            if (notification.username !== "MoTD") {
-                const messageLink = document.createElement('a');
-                messageLink.href = notification.messageLink;
-                messageLink.target = '_blank';
-                messageLink.classList.add('notification-link');
-                messageLink.textContent = 'View Message';
-                item.appendChild(messageLink);
-            }
-
+            item.innerHTML = `
+                <div class="notification-header">
+                    ${notification.username !== "MoTD" ? `<img src="${notification.avatarUrl}" alt="${notification.username}" class="notification-avatar">` : ''}
+                    <div>
+                        <div class="notification-title">${usernameLink}</div>
+                        <div class="notification-time">${notification.timeCreated} in ${notification.lobbyName}</div>
+                    </div>
+                </div>
+                <div class="notification-body">${formattedBody}</div>
+                ${notification.username !== "MoTD" ? `<a href="${notification.messageLink}" target="_blank" class="notification-link">View Message</a>` : ''}
+                <a href="#" class="copy-link" data-username="${notification.username}" data-lobby="${notification.lobbyName}" data-time="${notification.timeCreated}" data-body="${notification.body}">Copy Message</a>
+            `;
             historyContainer.appendChild(item);
         });
 
@@ -147,54 +137,77 @@ function loadHistory() {
             });
             paginationContainer.appendChild(pageButton);
         }
+
+        document.querySelectorAll('.copy-link').forEach(link => {
+            link.addEventListener('click', (event) => {
+                event.preventDefault();
+                copyNotification(event.target);
+            });
+        });
     });
 }
 
-function formatMessage(message) {
-    const div = document.createElement('div');
-    const lines = message.split('\n');
+function copyNotification(element) {
+    const username = element.getAttribute('data-username');
+    const lobby = element.getAttribute('data-lobby');
+    const timeCreated = element.getAttribute('data-time');
+    const body = element.getAttribute('data-body');
 
-    lines.forEach(line => {
-        const p = document.createElement('p');
+    const formattedText = `
+\`\`\`
+${body}
+\`\`\`
+~ ${username} in ${lobby} ${timeCreated}
+    `;
 
-        const parts = line.split(/(Audience: |Alpha Patch [\d.]+:|Server Info: |Long Term Persistence:|Testing\/Feedback Focus|New Global Event:|Known Issues|Features & Gameplay|Bug Fixes|Technical|Fixed - )/g);
-
-        parts.forEach(part => {
-            const span = document.createElement('span');
-
-            if (part.startsWith('Audience: ')) {
-                span.appendChild(document.createElement('strong')).textContent = 'Audience: ';
-            } else if (part.startsWith('Alpha Patch')) {
-                span.appendChild(document.createElement('strong')).textContent = part;
-            } else if (part.startsWith('Server Info: ')) {
-                span.appendChild(document.createElement('strong')).textContent = 'Server Info: ';
-            } else if (part.startsWith('Long Term Persistence:')) {
-                span.appendChild(document.createElement('strong')).textContent = 'Long Term Persistence:';
-            } else if (part.startsWith('Testing/Feedback Focus')) {
-                span.appendChild(document.createElement('strong')).textContent = 'Testing/Feedback Focus';
-            } else if (part.startsWith('New Global Event:')) {
-                span.appendChild(document.createElement('strong')).textContent = 'New Global Event:';
-            } else if (part.startsWith('Known Issues')) {
-                span.appendChild(document.createElement('strong')).textContent = 'Known Issues';
-            } else if (part.startsWith('Features & Gameplay')) {
-                span.appendChild(document.createElement('strong')).textContent = 'Features & Gameplay';
-            } else if (part.startsWith('Bug Fixes')) {
-                span.appendChild(document.createElement('strong')).textContent = 'Bug Fixes';
-            } else if (part.startsWith('Technical')) {
-                span.appendChild(document.createElement('strong')).textContent = 'Technical';
-            } else if (part.startsWith('Fixed - ')) {
-                span.textContent = '• Fixed - ' + part.slice(8);
-            } else {
-                span.textContent = part;
-            }
-
-            p.appendChild(span);
-        });
-
-        div.appendChild(p);
+    navigator.clipboard.writeText(formattedText.trim()).then(() => {
+        alert("Message copied to clipboard!");
+        console.log("Message copied:", formattedText);
+    }).catch(err => {
+        console.error("Error copying message:", err);
     });
+}
 
-    return div;
+document.addEventListener('DOMContentLoaded', () => {
+    populateDeveloperDropdown();
+    setupMessageTypeFilter();
+    setupDateFilter();
+    loadHistory();
+
+    const clearHistoryButton = document.getElementById('clearHistoryButton');
+    clearHistoryButton.addEventListener('click', () => {
+        clearHistory();
+    });
+});
+
+function clearHistory() {
+    const userConfirmed = confirm("Are you sure you want to delete the history? This action cannot be undone.");
+    if (userConfirmed) {
+        browser.storage.local.remove('notificationsHistory').then(() => {
+            console.log("Notification history cleared.");
+            loadHistory();
+        });
+    } else {
+        console.log("History deletion canceled by the user.");
+    }
+}
+
+function formatMessage(message) {
+    message = message.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="notification-url">$1</a>');
+    message = message.replace(/([.!?])\s+/g, '$1<br><br>');
+
+    return message
+        .replace(/(Audience: )/g, `<br><br><strong>Audience:</strong> `)
+        .replace(/(Alpha Patch [\d.]+):/g, `<strong>$1:</strong><br><br>`)
+        .replace(/Server Info: /g, `<br><br><strong>Server Info:</strong> `)
+        .replace(/Long Term Persistence:/g, `<br><br><strong>Long Term Persistence:</strong>`)
+        .replace(/Testing\/Feedback Focus/g, `<br><br><strong>Testing/Feedback Focus</strong><br><br>`)
+        .replace(/New Global Event:/g, `<br><br><strong>New Global Event:</strong>`)
+        .replace(/Known Issues/g, `<br><br><strong>Known Issues</strong><br><br>`)
+        .replace(/Features & Gameplay/g, `<br><br><strong>Features & Gameplay</strong><br><br>`)
+        .replace(/Bug Fixes/g, `<br><br><strong>Bug Fixes</strong><br><br>`)
+        .replace(/Technical/g, `<br><br><strong>Technical</strong><br><br>`)
+        .replace(/\n/g, '<br><br>');
 }
 
 function filterHistoryByDeveloperAndType(history) {
@@ -212,5 +225,48 @@ function filterHistoryByDeveloperAndType(history) {
         );
 
         return developerMatch && messageTypeMatch;
+    });
+}
+
+function filterHistoryByDate(history) {
+    const now = new Date();
+    return history.filter(notification => {
+        const timeCreated = notification.timeCreated;
+
+        const dateRegex = /(\d{4})-(\d{2})-(\d{2}), (\d{1,2}):(\d{2}):(\d{2}) ([ap]\.m\.)/i;
+        const match = timeCreated.match(dateRegex);
+
+        if (!match) {
+            console.warn("Date format did not match expected pattern:", timeCreated);
+            return false;
+        }
+
+        const [_, year, month, day, hours, minutes, seconds, period] = match;
+        let hour = parseInt(hours, 10);
+
+        if (period.toLowerCase() === 'p.m.' && hour !== 12) {
+            hour += 12;
+        } else if (period.toLowerCase() === 'a.m.' && hour === 12) {
+            hour = 0;
+        }
+
+        const notificationDate = new Date(year, month - 1, day, hour, parseInt(minutes, 10), parseInt(seconds, 10));
+
+        if (currentDateFilter === 'today') {
+            return (
+                notificationDate.getFullYear() === now.getFullYear() &&
+                notificationDate.getMonth() === now.getMonth() &&
+                notificationDate.getDate() === now.getDate()
+            );
+        } else if (currentDateFilter === 'yesterday') {
+            const yesterday = new Date(now);
+            yesterday.setDate(now.getDate() - 1);
+            return (
+                notificationDate.getFullYear() === yesterday.getFullYear() &&
+                notificationDate.getMonth() === yesterday.getMonth() &&
+                notificationDate.getDate() === yesterday.getDate()
+            );
+        }
+        return true;
     });
 }

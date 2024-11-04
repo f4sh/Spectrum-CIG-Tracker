@@ -654,7 +654,7 @@ browser.runtime.onStartup.addListener(() => {
 let motdTrackingEnabled = false;
 
 function startMotdTracking() {
-    if (!motdInterval && motdTrackingEnabled && trackingInterval) {
+    if (motdTrackingEnabled && !motdInterval) {
         motdInterval = setInterval(checkForMotdUpdates, motdCheckInterval);
         console.log(`Started MoTD tracking at an interval of ${motdCheckInterval / 1000} seconds.`);
     }
@@ -682,7 +682,7 @@ async function checkForMotdUpdates() {
 browser.storage.onChanged.addListener((changes) => {
     if (changes.trackMotd) {
         motdTrackingEnabled = changes.trackMotd.newValue;
-        if (motdTrackingEnabled && trackingInterval) {
+        if (motdTrackingEnabled) {
             startMotdTracking();
         } else {
             stopMotdTracking();
@@ -707,7 +707,6 @@ async function fetchMotd(lobbyId, lobbyName) {
         const response = await fetch("https://robertsspaceindustries.com/api/spectrum/lobby/getMotd", {
             method: 'POST',
             headers: {
-                'authority': 'robertsspaceindustries.com',
                 'accept': 'application/json',
                 'content-type': 'application/json',
                 'x-rsi-token': rsiToken,
@@ -747,63 +746,65 @@ async function sendMotdNotification(message, lobbyName, lastModified) {
     const notificationId = `motd-${lobbyName}-${lastModified}`;
     const defaultAvatarUrl = browser.runtime.getURL("icons/icon-48.png");
 
-    browser.storage.local.get('shownMessageIds').then((result) => {
-        const shownMessageIds = result.shownMessageIds || {};
+    const result = await browser.storage.local.get('shownMessageIds');
+    const shownMessageIds = result.shownMessageIds || {};
 
-        if (shownMessageIds[notificationId]) {
-            console.log(`Notification for MoTD in ${lobbyName} already shown.`);
-            return;
+    if (shownMessageIds[notificationId]) {
+        console.log(`Notification for MoTD in ${lobbyName} already shown.`);
+        return;
+    }
+
+    shownMessageIds[notificationId] = true;
+    await browser.storage.local.set({ shownMessageIds });
+
+    const notificationMessage = message.replace(/\n/g, ' ');
+    const motdNotification = {
+        _id: notificationId,
+        _source: {
+            time_created: lastModified * 1000,
+            body: message
+        },
+        details: {
+            member: { nickname: 'MoTD' },
+            lobby: { name: lobbyName },
+            community: { slug: 'SC' },
+            last_modified: lastModified
         }
+    };
 
-        shownMessageIds[notificationId] = true;
-        browser.storage.local.set({ shownMessageIds });
-
-        const notificationMessage = message.replace(/\n/g, ' ');
-        const motdNotification = {
-            _id: notificationId,
-            _source: {
-                time_created: lastModified * 1000,
-                body: message
-            },
-            details: {
-                member: { nickname: 'MoTD' },
-                lobby: { name: lobbyName },
-                community: { slug: 'SC' },
-                last_modified: lastModified
-            }
-        };
-
-        createNotification(motdNotification, 'MoTD', defaultAvatarUrl, notificationMessage);
-        console.log(`Notification sent for MoTD update in ${lobbyName}`);
-    });
+    createNotification(motdNotification, 'MoTD', defaultAvatarUrl, notificationMessage);
+    console.log(`Notification sent for MoTD update in ${lobbyName}`);
 }
 
 async function initializeTracking() {
     const result = await browser.storage.local.get(['selectedUsers', 'interval', 'tracking', 'trackMotd']);
-    const intervalMinutes = result.interval / 60 || 1;
+    const intervalMinutes = (result.interval || 60) / 60;
 
     loginNotificationShown = false;
-    isLoginEnsured = false;
     loginTabId = null;
+    isLoginEnsured = false;
 
-    await openSpectrumLoginPage().then(() => {
-        ensureRSILogin().then(async () => {
-            console.log("Login ensured for tracking.");
+    try {
+        await openSpectrumLoginPage();
+        await ensureRSILogin();
+        console.log("Login ensured for tracking.");
 
-            await openAndCloseMainRSIPage();
+        await openAndCloseMainRSIPage();
 
-            if (result.tracking) {
-                browser.alarms.create("messageCheckAlarm", { periodInMinutes: intervalMinutes });
-                console.log("Tracking started/resumed with alarm set at", intervalMinutes, "minute(s).");
+        if (result.tracking) {
+            browser.alarms.create("messageCheckAlarm", { periodInMinutes: intervalMinutes });
+            console.log(`Tracking started/resumed with alarm set at ${intervalMinutes} minute(s).`);
+        }
 
-                if (result.trackMotd) {
-                    startMotdTracking();
-                    console.log("MoTD tracking started/resumed.");
-                }
-            }
-        });
-    });
+        if (result.trackMotd) {
+            startMotdTracking();
+            console.log("MoTD tracking started/resumed.");
+        }
+    } catch (error) {
+        console.error("Error during initializeTracking:", error.message);
+    }
 }
+
 
 browser.runtime.onStartup.addListener(async () => {
     console.log("Browser startup detected. Initializing tracking...");
@@ -811,8 +812,8 @@ browser.runtime.onStartup.addListener(async () => {
 });
 
 browser.runtime.onInstalled.addListener(async (details) => {
-    if (details.reason === 'update') {
-        console.log("Extension updated. Reinitializing tracking...");
+    if (details.reason === 'update' || details.reason === 'install') {
+        console.log("Extension installed or updated. Initializing tracking...");
 
         const { tracking } = await browser.storage.local.get('tracking');
         if (tracking) {
@@ -857,12 +858,11 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
                             browser.alarms.create("messageCheckAlarm", { periodInMinutes: intervalMinutes });
                             console.log(`Tracking messages started with alarm set to ${intervalMinutes} minute(s).`);
 
-                            browser.storage.local.get('trackMotd').then((result) => {
-                                if (result.trackMotd && !motdInterval) {
-                                    startMotdTracking();
-                                    console.log("MoTD tracking started after user-initiated tracking start.");
-                                }
-                            });
+                            const result = await browser.storage.local.get('trackMotd');
+                            if (result.trackMotd) {
+                                startMotdTracking();
+                                console.log("MoTD tracking started after user-initiated tracking start.");
+                            }
 
                             browser.tabs.onUpdated.removeListener(listener);
                         } else {
@@ -882,6 +882,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
             console.log("Stopped tracking messages.");
         }
         stopMotdTracking();
+        console.log("Stopped MoTD tracking.");
         sendResponse({ success: true });
 
     } else if (message.action === 'changeInterval') {

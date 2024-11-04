@@ -68,11 +68,11 @@ document.addEventListener('DOMContentLoaded', function () {
             const username = checkbox.getAttribute('data-username');
             const checkedBoxes = Array.from(userCheckboxes).filter(box => box.checked);
 
-            if (checkedBoxes.length > 5) {
+            if (checkedBoxes.length > 8) {
                 event.target.checked = false;
-                alert("You can select a maximum of 5 users.");
+                alert("You can select a maximum of 8 users.");
             } else {
-                document.getElementById('userCount').textContent = `Selected Users: ${checkedBoxes.length}/5`;
+                document.getElementById('userCount').textContent = `Selected Users: ${checkedBoxes.length}/8`;
 
                 if (event.target.checked) {
                     console.log(`User added: ${username}`);

@@ -16,7 +16,7 @@ const predefinedUsers = {
 };
 
 let currentPage = 1;
-const itemsPerPage = 5;
+const itemsPerPage = 10;
 let currentDeveloperFilter = 'all';
 let currentMessageTypeFilter = 'all';
 let currentDateFilter = 'all';
@@ -147,6 +147,7 @@ function loadHistory() {
         });
     });
 }
+
 function copyNotification(element) {
     const username = element.getAttribute('data-username');
     const lobby = element.getAttribute('data-lobby');
@@ -194,21 +195,22 @@ function clearHistory() {
 
 function formatMessage(message) {
     message = message.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="notification-url">$1</a>');
+    message = message.replace(/([.!?])\s+/g, '$1<br><br>');
 
     return message
         .replace(/(Audience: )/g, `<br><br><strong>Audience:</strong> `)
-        .replace(/(Alpha Patch [\d.]+):/g, `<strong>$1:</strong><br>`)
-        .replace(/Server Info: /g, `<br><strong>Server Info:</strong> `)
-        .replace(/Long Term Persistence:/g, `<br><strong>Long Term Persistence:</strong>`)
-        .replace(/Testing\/Feedback Focus/g, `<br><strong>Testing/Feedback Focus</strong><br>`)
-        .replace(/New Global Event:/g, `<br><strong>New Global Event:</strong>`)
-        .replace(/Known Issues/g, `<br><br><strong>Known Issues</strong><br>`)
-        .replace(/Features & Gameplay/g, `<br><br><strong>Features & Gameplay</strong><br>`)
-        .replace(/Bug Fixes/g, `<br><br><strong>Bug Fixes</strong><br>`)
-        .replace(/Technical/g, `<br><br><strong>Technical</strong><br>`)
-        .replace(/Fixed - /g, `<br>• Fixed - `)
-        .replace(/\n/g, '<br>');
+        .replace(/(Alpha Patch [\d.]+):/g, `<strong>$1:</strong><br><br>`)
+        .replace(/Server Info: /g, `<br><br><strong>Server Info:</strong> `)
+        .replace(/Long Term Persistence:/g, `<br><br><strong>Long Term Persistence:</strong>`)
+        .replace(/Testing\/Feedback Focus/g, `<br><br><strong>Testing/Feedback Focus</strong><br><br>`)
+        .replace(/New Global Event:/g, `<br><br><strong>New Global Event:</strong>`)
+        .replace(/Known Issues/g, `<br><br><strong>Known Issues</strong><br><br>`)
+        .replace(/Features & Gameplay/g, `<br><br><strong>Features & Gameplay</strong><br><br>`)
+        .replace(/Bug Fixes/g, `<br><br><strong>Bug Fixes</strong><br><br>`)
+        .replace(/Technical/g, `<br><br><strong>Technical</strong><br><br>`)
+        .replace(/\n/g, '<br><br>');
 }
+
 
 function filterHistoryByDeveloperAndType(history) {
     return history.filter(notification => {

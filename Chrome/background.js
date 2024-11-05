@@ -497,8 +497,8 @@ function createStandardNotification(message, username, avatarUrl, details) {
 }
 
 async function createNotification(message, username, avatarUrl = null) {
-    const source = message._source;
-    const details = message.details;
+    const source = message._source || {};
+    const details = message.details || {};
 
     console.log("Message details:", JSON.stringify(details, null, 2));
 
@@ -506,29 +506,28 @@ async function createNotification(message, username, avatarUrl = null) {
     let formattedMessage;
 
     if (username === "MoTD") {
-        formattedMessage = formatMessageWithEmojis(source.body, null);
+        formattedMessage = formatMessageWithEmojis(source.body || "", null);
     } else {
         if (!communityId) {
             console.error("Community ID is undefined. Cannot fetch emojis.");
-            formattedMessage = formatMessageWithEmojis(source.body, null);
+            formattedMessage = formatMessageWithEmojis(source.body || "", null);
         } else {
             await fetchEmojis(communityId);
-            formattedMessage = formatMessageWithEmojis(source.body, communityId);
+            formattedMessage = formatMessageWithEmojis(source.body || "", communityId);
         }
     }
 
     const notificationAvatarUrl = avatarUrl || details?.member?.avatar || 'icons/icon-48.png';
     const timeCreated = username === "MoTD" ? new Date(details.last_modified * 1000).toLocaleString() : new Date(source.time_created).toLocaleString();
-    const messageId = message._id;
+    const messageId = message._id || `motd-${details.lobby?.name}-${details.last_modified}`;
 
-    const messageType = message._index || 'tavern_message';
+    const messageType = message._index || (username === "MoTD" ? 'motd' : 'tavern_message');
     if (!lastMessageIds[messageType]) lastMessageIds[messageType] = {};
 
     if (lastMessageIds[messageType][username] === messageId) {
         console.log(`Notification for user ${username} with ${messageType} messageId ${messageId} has already been shown.`);
         return;
     }
-
     lastMessageIds[messageType][username] = messageId;
 
     let lobbyName = "Unknown Lobby";
@@ -624,10 +623,18 @@ const lastMessageIds = {
     'tavern_forum_thread_op': {},
     'tavern_forum_thread_reply': {},
     'tavern_message': {},
-    'motd': {}
+    'motd': null
 };
 
+chrome.storage.local.get('lastMessageIds', (result) => {
+    if (result.lastMessageIds) {
+        Object.assign(lastMessageIds, result.lastMessageIds);
+    }
+});
+
 async function checkForNewMessages() {
+    console.log("checkForNewMessages called");
+
     if (!isLoginConfirmed) {
         console.warn("Login not confirmed; skipping message checks.");
         return;
@@ -640,37 +647,80 @@ async function checkForNewMessages() {
 
     for (const username of selectedUsers) {
         const userId = predefinedUsers[username];
+
+        if (!userId) {
+            console.error(`User ID not found for username: ${username}`);
+            continue;
+        }
+
         console.log(`Processing user: ${username}, userId: ${userId}`);
 
         try {
             const messages = await fetchUserMessages(userId);
             if (messages.length > 0) {
+                const latestMessageByType = { chat: null, thread: null };
+
                 for (const message of messages) {
                     const messageId = message._id;
                     const messageType = determineMessageType(message);
-                    const communityId = message.details.community?.id;
 
-                    if (communityId) {
-                        await fetchEmojis(communityId);
-                    } else {
-                        console.warn(`Community ID is undefined for user ${username}.`);
+                    if (messageType !== 'motd' && !lastMessageIds[messageType]) {
+                        lastMessageIds[messageType] = {};
                     }
 
-                    if (!lastMessageIds[messageType]) lastMessageIds[messageType] = {};
-
-                    if (lastMessageIds[messageType][username] !== messageId) {
-                        await createNotification(message, username);
-                        lastMessageIds[messageType][username] = messageId;
-                        console.log(`Notification sent for user ${username}, messageId: ${messageId}, type: ${messageType}`);
-                    } else {
-                        console.log(`No new ${messageType} messages for user ${username}; messageId: ${messageId} already shown.`);
+                    if (messageType !== 'motd' &&
+                        (!latestMessageByType[messageType] ||
+                            new Date(message._source.time_created) > new Date(latestMessageByType[messageType]._source.time_created))) {
+                        latestMessageByType[messageType] = message;
                     }
                 }
+
+                for (const [messageType, latestMessage] of Object.entries(latestMessageByType)) {
+                    if (latestMessage && lastMessageIds[messageType][username] !== latestMessage._id) {
+                        await createNotification(latestMessage, username);
+                        lastMessageIds[messageType][username] = latestMessage._id;
+                        console.log(`Notification sent for user ${username}, messageId: ${latestMessage._id}, type: ${messageType}`);
+                    } else if (latestMessage) {
+                        console.log(`Duplicate notification avoided for user ${username}, messageId: ${latestMessage._id}, type: ${messageType}`);
+                    }
+                }
+
+                chrome.storage.local.set({ lastMessageIds });
             } else {
                 console.log(`No new messages for userId ${userId}.`);
             }
         } catch (error) {
             console.error(`Error fetching messages for user ${username}:`, error);
+        }
+    }
+}
+
+async function checkForMotdUpdates() {
+    const lobbies = [
+        { id: "38230", name: "sc-testing-chat" },
+        { id: "1355241", name: "etf-testing-chat" }
+    ];
+
+    for (const lobby of lobbies) {
+        try {
+            const data = await fetchMotd(lobby.id, lobby.name);
+            if (data?.motd) {
+                const motdMessage = data.motd.message;
+                const lastModified = data.motd.last_modified;
+
+                if (motdMessage && lastModified !== lastMessageIds.motd) {
+                    lastMessageIds.motd = lastModified;
+                    await sendMotdNotification(motdMessage, lobby.name, lastModified, data.motd.community?.id);
+                    console.log(`Notification sent for MoTD update in ${lobby.name}`);
+                    chrome.storage.local.set({ lastMessageIds });
+                } else {
+                    console.log(`Duplicate MoTD notification avoided for lobby: ${lobby.name}`);
+                }
+            } else {
+                console.error(`MoTD data is missing for lobby: ${lobby.name}`);
+            }
+        } catch (error) {
+            console.error(`Error fetching MoTD for lobby ${lobby.name}:`, error.message);
         }
     }
 }
@@ -722,8 +772,15 @@ chrome.runtime.onStartup.addListener(() => {
 
 let motdTrackingEnabled = false;
 
+chrome.storage.local.get('trackMotd', (result) => {
+    motdTrackingEnabled = result.trackMotd || false;
+    if (motdTrackingEnabled) {
+        startMotdTracking();
+    }
+});
+
 function startMotdTracking() {
-    if (!motdInterval && motdTrackingEnabled && trackingInterval) {
+    if (!motdInterval && motdTrackingEnabled) {
         console.log("Starting MoTD tracking.");
         motdInterval = setInterval(checkForMotdUpdates, motdCheckInterval);
         console.log(`Started MoTD tracking at an interval of ${motdCheckInterval / 1000} seconds.`);
@@ -738,25 +795,10 @@ function stopMotdTracking() {
     }
 }
 
-async function checkForMotdUpdates() {
-    const lobbies = [
-        { id: "38230", name: "sc-testing-chat" },
-        { id: "1355241", name: "etf-testing-chat" }
-    ];
-
-    for (const lobby of lobbies) {
-        try {
-            await fetchMotd(lobby.id, lobby.name);
-        } catch (error) {
-            console.error(`Error fetching MoTD for lobby ${lobby.name}:`, error.message);
-        }
-    }
-}
-
 chrome.storage.onChanged.addListener((changes) => {
     if (changes.trackMotd) {
         motdTrackingEnabled = changes.trackMotd.newValue;
-        if (motdTrackingEnabled && trackingInterval) {
+        if (motdTrackingEnabled) {
             startMotdTracking();
         } else {
             stopMotdTracking();
@@ -765,14 +807,14 @@ chrome.storage.onChanged.addListener((changes) => {
 });
 
 async function fetchMotd(lobbyId, lobbyName) {
-    console.log(`Starting fetch for MoTD in lobby: ${lobbyName} (ID: ${lobbyId})`);
+    console.log(`Starting fetch for MoTD in lobby: ${lobbyName || 'unknown'} (ID: ${lobbyId})`);
     try {
         const loginData = await getRSICookies();
         if (!loginData || !loginData.rsiToken) {
             console.warn("RSI cookies are missing; attempting re-login.");
             await ensureRSILogin();
             console.log("Re-attempting MoTD fetch after login...");
-            return fetchMotd(lobbyId, lobbyName);
+            return await fetchMotd(lobbyId, lobbyName);
         }
 
         const { rsiToken, xsrfToken } = loginData;
@@ -793,29 +835,19 @@ async function fetchMotd(lobbyId, lobbyName) {
 
         if (response.ok) {
             const data = await response.json();
-
             if (data.success === 0 && data.code === 'ErrPermissionDenied') {
                 console.warn(`Permission Denied error in lobby: ${lobbyName}`);
                 stopTrackingService();
-                return;
+                return null;
             }
-
-            const motdMessage = data.data?.motd?.message;
-            const lastModified = data.data?.motd?.last_modified;
-            const communityId = data.data?.motd?.community?.id;
-
-            if (motdMessage && lastModified !== previousMotdTimestamps[lobbyId]) {
-                console.log(`New MoTD found for ${lobbyName}. Last modified: ${lastModified}`);
-                previousMotdTimestamps[lobbyId] = lastModified;
-                await sendMotdNotification(motdMessage, lobbyName, lastModified, communityId);
-            } else {
-                console.log(`No new MoTD for ${lobbyName} or already up-to-date.`);
-            }
+            return data.data;
         } else {
             console.error(`Failed to fetch MoTD for lobby ${lobbyName}: ${response.status}`);
+            return null;
         }
     } catch (error) {
         console.error(`Error fetching MoTD for lobby ${lobbyName}:`, error.message);
+        return null;
     }
 }
 
@@ -917,7 +949,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
+let isTrackingInitialized = false;
+
 async function initializeTracking() {
+    console.log("initializeTracking called");
+
     chrome.storage.local.get(['selectedUsers', 'interval', 'tracking', 'trackMotd'], async (result) => {
         const interval = result.interval || 60;
 
@@ -931,17 +967,23 @@ async function initializeTracking() {
 
                 await openAndCloseMainRSIPage();
 
-                if (result.tracking && !trackingInterval) {
+                if (trackingInterval) clearInterval(trackingInterval);
+                if (motdInterval) clearInterval(motdInterval);
+
+                if (result.tracking) {
                     trackingInterval = setInterval(() => {
                         checkForNewMessages();
                     }, interval * 1000);
                     console.log("Tracking started/resumed at an interval of", interval, "seconds.");
-
-                    if (result.trackMotd && !motdInterval) {
-                        startMotdTracking();
-                        console.log("MoTD tracking started/resumed.");
-                    }
                 }
+
+                if (result.trackMotd) {
+                    motdTrackingEnabled = true;
+                    startMotdTracking();
+                    console.log("MoTD tracking started/resumed.");
+                }
+
+                isTrackingInitialized = true;
             });
         });
     });
@@ -953,12 +995,12 @@ chrome.runtime.onStartup.addListener(async () => {
 });
 
 chrome.runtime.onInstalled.addListener(async (details) => {
-    if (details.reason === 'update') {
-        console.log("Extension updated. Reinitializing tracking...");
+    if (details.reason === 'install' || details.reason === 'update') {
+        console.log("Extension installed or updated. Initializing tracking...");
 
         const { tracking } = await chrome.storage.local.get('tracking');
         if (tracking) {
-            console.log("Tracker was active before the update. Restarting tracking...");
+            console.log("Tracker was active before installation or update. Restarting tracking...");
             await initializeTracking();
         }
     }
@@ -997,8 +1039,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
                             chrome.storage.local.get('trackMotd', (result) => {
                                 if (result.trackMotd && !motdInterval) {
+                                    motdTrackingEnabled = true;
                                     startMotdTracking();
-                                    console.log(`MoTD tracking started after user-initiated tracking start.`);
+                                    console.log("MoTD tracking started after user-initiated tracking start.");
                                 }
                             });
 

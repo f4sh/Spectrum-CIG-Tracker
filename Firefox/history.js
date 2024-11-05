@@ -22,10 +22,22 @@ let currentMessageTypeFilter = 'all';
 let currentDateFilter = 'all';
 
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("DOM fully loaded and parsed.");
+
     populateDeveloperDropdown();
     setupMessageTypeFilter();
     setupDateFilter();
     loadHistory();
+
+    const clearButton = document.getElementById('clearHistoryButton');
+    if (clearButton) {
+        clearButton.addEventListener('click', () => {
+            console.log("Clear History button clicked.");
+            clearHistory();
+        });
+    } else {
+        console.error("Clear History button not found in the DOM.");
+    }
 });
 
 browser.storage.onChanged.addListener((changes, namespace) => {
@@ -230,11 +242,21 @@ ${body}
 }
 
 function clearHistory() {
+    console.log("clearHistory function called.");
+
     const userConfirmed = confirm("Are you sure you want to delete the history? This action cannot be undone.");
     if (userConfirmed) {
         browser.storage.local.remove('notificationsHistory').then(() => {
             console.log("Notification history cleared.");
+
+            currentPage = 1;
             loadHistory();
+
+            const historyContainer = document.getElementById('historyContainer');
+            historyContainer.innerHTML = '<p>No history available.</p>';
+            document.getElementById('paginationContainer').textContent = '';
+        }).catch((error) => {
+            console.error("Error clearing notification history:", error);
         });
     } else {
         console.log("History deletion canceled by the user.");

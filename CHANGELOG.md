@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6] - November 5, 2024
+
+### Bug Fixes
+- **Display Most Recent Messages**: Now shows only the most recent MoTD, and the last message / thread per CIG developer, as intended.
+- **Excessive Notifications Fixed**: Implemented safeguards to prevent multiple intervals, resolving repeated notifications.
+
+---
+
 ## [1.5] - November 4, 2024
 
 ### Improvements

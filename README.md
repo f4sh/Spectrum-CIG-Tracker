@@ -2,7 +2,7 @@
 
 I’m excited to introduce **Spectrum CIG Tracker**, now live and crafted to enhance your experience with Star Citizen’s development! Tailored for the dedicated Star Citizen community, this extension brings real-time desktop updates directly from CIG developers and the **Message of the Day (MoTD)** on Spectrum. With Spectrum CIG Tracker, you can select specific developers to follow, receiving immediate desktop notifications whenever they post. This keeps you connected to essential discussions and updates effortlessly, without needing to refresh Spectrum.
 
-This release marks the start of **Spectrum CIG Tracker’s testing phase**, so users might experience occasional bugs or unexpected behavior as I work to refine its functionality. You can track up to four developers with a minimum refresh interval of five seconds, ensuring timely updates without overwhelming the API. I’ll continue testing and may adjust tracking limits, refresh intervals, and other features in future updates to enhance functionality and improve the user experience.
+Disclaimer: You can currently track up to eight developers, with a minimum refresh interval of five seconds (fixed at 60 seconds for the MoTD), ensuring timely updates while managing API usage effectively. I'll continue testing and may adjust tracking limits, refresh intervals, and other features in future updates to enhance functionality and improve the user experience.
 
 Spectrum CIG Tracker is available for **Firefox**, **Chrome**, and other Chromium-based browsers like **Opera**. You can easily find it by searching "**Spectrum CIG Tracker**" in the appropriate store or by visiting these URLs directly:
 

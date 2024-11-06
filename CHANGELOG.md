@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.7] - November 6, 2024
+
+### Bug Fixes
+- **HTML Entity Decoding**: Resolved display issues for notifications containing special characters (e.g., apostrophes) by implementing custom entity decoding for better readability.
+- **Expanded Emoji Support**: Added more emojis to fix a bug where only shortcode was visible, ensuring emojis appear in notifications as intended.
+- **Error Handling**: Improved error logging for clearer diagnostics, particularly for cookie and API-related issues.
+
+---
+
 ## [1.6] - November 5, 2024
 
 ### Bug Fixes

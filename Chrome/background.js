@@ -56,9 +56,10 @@ chrome.cookies.onChanged.addListener(async (changeInfo) => {
     }
 });
 
-function generateNotificationId(base) {
-    return `${base}-${Date.now()}-${Math.random()}`;
+function generateNotificationId(base, userId, messageId) {
+    return `${base}-${userId}-${messageId}-${Date.now()}-${Math.random()}`;
 }
+
 
 async function notifyUserToLogIn() {
     if (!loginNotificationShown) {
@@ -196,7 +197,7 @@ async function startTrackingAfterRedirection() {
 
     const interval = await getTrackingInterval();
     trackingInterval = setInterval(() => {
-        checkForNewMessages();
+        debounceCheckForNewMessages();
     }, interval);
 
     console.log(`Tracking messages started at an interval of ${interval / 1000} seconds.`);
@@ -381,12 +382,7 @@ async function fetchUserMessages(userId, retryCount = 0) {
                 return [];
             }
 
-            if (data.data?.hits?.hits.length > 0) {
-                return data.data.hits.hits;
-            } else {
-                console.log(`No new messages for userId ${userId}.`);
-                return [];
-            }
+            return data.data?.hits?.hits || [];
         } else {
             if (response.status === 403 && retryCount < maxRetries) {
                 await new Promise(resolve => setTimeout(resolve, delay));
@@ -422,7 +418,52 @@ const hardcodedEmojis = {
     ':fire:': '🔥',
     ':pizza:': '🍕',
     ':tophat:': '🎩',
-    ':monocle_face:': '🧐'
+    ':monocle_face:': '🧐',
+    ':slightly_smiling_face:': '🙂',
+    ':smile:': '😄',
+    ':grinning:': '😀',
+    ':grin:': '😁',
+    ':joy:': '😂',
+    ':rofl:': '🤣',
+    ':sweat_smile:': '😅',
+    ':laughing:': '😆',
+    ':wink:': '😉',
+    ':blush:': '😊',
+    ':yum:': '😋',
+    ':sunglasses:': '😎',
+    ':heart_eyes:': '😍',
+    ':kissing_heart:': '😘',
+    ':kissing:': '😗',
+    ':kissing_smiling_eyes:': '😙',
+    ':kissing_closed_eyes:': '😚',
+    ':slight_smile:': '🙂',
+    ':thinking:': '🤔',
+    ':neutral_face:': '😐',
+    ':expressionless:': '😑',
+    ':no_mouth:': '😶',
+    ':smirk:': '😏',
+    ':unamused:': '😒',
+    ':sweat:': '😓',
+    ':pensive:': '😔',
+    ':confused:': '😕',
+    ':astonished:': '😲',
+    ':fearful:': '😨',
+    ':cold_sweat:': '😰',
+    ':weary:': '😩',
+    ':tired_face:': '😫',
+    ':sob:': '😭',
+    ':angry:': '😠',
+    ':rage:': '😡',
+    ':sparkles:': '✨',
+    ':thumbsup:': '👍',
+    ':thumbsdown:': '👎',
+    ':clap:': '👏',
+    ':raised_hands:': '🙌',
+    ':wave:': '👋',
+    ':pray:': '🙏',
+    ':eyes:': '👀',
+    ':heart:': '❤️',
+    ':broken_heart:': '💔'
 };
 
 async function fetchEmojis(communityId) {
@@ -496,12 +537,31 @@ function createStandardNotification(message, username, avatarUrl, details) {
     chrome.notifications.create(`${username}-${Date.now()}`, notificationOptions);
 }
 
+function decodeHtmlEntities(text) {
+    const entityMap = {
+        '&amp;': '&',
+        '&lt;': '<',
+        '&gt;': '>',
+        '&quot;': '"',
+        '&#039;': "'",
+        '&#39;': "'",
+        '&apos;': "'",
+        '&#x2F;': '/',
+        '&nbsp;': ' ',
+        '&cent;': '¢',
+        '&pound;': '£',
+        '&yen;': '¥',
+        '&euro;': '€',
+        '&copy;': '©',
+        '&reg;': '®'
+    };
+
+    return text.replace(/&[#A-Za-z0-9]+;/g, (match) => entityMap[match] || match);
+}
+
 async function createNotification(message, username, avatarUrl = null) {
     const source = message._source || {};
     const details = message.details || {};
-
-    console.log("Message details:", JSON.stringify(details, null, 2));
-
     const communityId = details.community?.id;
     let formattedMessage;
 
@@ -517,10 +577,11 @@ async function createNotification(message, username, avatarUrl = null) {
         }
     }
 
+    formattedMessage = decodeHtmlEntities(formattedMessage);
+
     const notificationAvatarUrl = avatarUrl || details?.member?.avatar || 'icons/icon-48.png';
     const timeCreated = username === "MoTD" ? new Date(details.last_modified * 1000).toLocaleString() : new Date(source.time_created).toLocaleString();
     const messageId = message._id || `motd-${details.lobby?.name}-${details.last_modified}`;
-
     const messageType = message._index || (username === "MoTD" ? 'motd' : 'tavern_message');
     if (!lastMessageIds[messageType]) lastMessageIds[messageType] = {};
 
@@ -619,6 +680,12 @@ async function createNotification(message, username, avatarUrl = null) {
     });
 }
 
+let debounceTimeout;
+function debounceCheckForNewMessages() {
+    if (debounceTimeout) clearTimeout(debounceTimeout);
+    debounceTimeout = setTimeout(checkForNewMessages, 300);
+}
+
 const lastMessageIds = {
     'tavern_forum_thread_op': {},
     'tavern_forum_thread_reply': {},
@@ -664,7 +731,7 @@ async function checkForNewMessages() {
                     const messageId = message._id;
                     const messageType = determineMessageType(message);
 
-                    if (messageType !== 'motd' && !lastMessageIds[messageType]) {
+                    if (!lastMessageIds[messageType]) {
                         lastMessageIds[messageType] = {};
                     }
 
@@ -763,7 +830,7 @@ chrome.runtime.onStartup.addListener(() => {
 
         if (result.tracking) {
             trackingInterval = setInterval(() => {
-                checkForNewMessages();
+                debounceCheckForNewMessages();
             }, interval * 1000);
             console.log("Tracking resumed on startup at an interval of", interval, "seconds.");
         }
@@ -913,7 +980,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
                             isLoginConfirmed = true;
                             trackingInterval = setInterval(() => {
-                                checkForNewMessages();
+                                debounceCheckForNewMessages();
                             }, interval);
 
                             console.log(`Tracking messages started at an interval of ${interval / 1000} seconds.`);
@@ -942,7 +1009,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (trackingInterval) {
             clearInterval(trackingInterval);
             trackingInterval = setInterval(() => {
-                checkForNewMessages();
+                debounceCheckForNewMessages();
             }, message.interval * 1000);
             console.log(`Changed tracking interval to ${message.interval} seconds.`);
         }
@@ -972,7 +1039,7 @@ async function initializeTracking() {
 
                 if (result.tracking) {
                     trackingInterval = setInterval(() => {
-                        checkForNewMessages();
+                        debounceCheckForNewMessages();
                     }, interval * 1000);
                     console.log("Tracking started/resumed at an interval of", interval, "seconds.");
                 }
@@ -1032,7 +1099,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
                             isLoginConfirmed = true;
                             trackingInterval = setInterval(() => {
-                                checkForNewMessages();
+                                debounceCheckForNewMessages();
                             }, interval);
 
                             console.log(`Tracking messages started at an interval of ${interval / 1000} seconds.`);
@@ -1067,7 +1134,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (trackingInterval) {
             clearInterval(trackingInterval);
             trackingInterval = setInterval(() => {
-                checkForNewMessages();
+                debounceCheckForNewMessages();
             }, message.interval * 1000);
             console.log(`Changed tracking interval to ${message.interval} seconds.`);
         }

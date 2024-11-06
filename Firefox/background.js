@@ -519,9 +519,25 @@ function createStandardNotification(message, username, avatarUrl, details) {
 }
 
 function decodeHtmlEntities(text) {
-    const textArea = document.createElement("textarea");
-    textArea.innerHTML = text;
-    return textArea.value;
+    const entityMap = {
+        '&amp;': '&',
+        '&lt;': '<',
+        '&gt;': '>',
+        '&quot;': '"',
+        '&#039;': "'",
+        '&#39;': "'",
+        '&apos;': "'",
+        '&#x2F;': '/',
+        '&nbsp;': ' ',
+        '&cent;': '¢',
+        '&pound;': '£',
+        '&yen;': '¥',
+        '&euro;': '€',
+        '&copy;': '©',
+        '&reg;': '®'
+    };
+
+    return text.replace(/&[#A-Za-z0-9]+;/g, (match) => entityMap[match] || match);
 }
 
 async function createNotification(message, username, avatarUrl = null) {

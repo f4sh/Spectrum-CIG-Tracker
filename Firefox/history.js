@@ -307,7 +307,28 @@ function formatMessage(message) {
             }
         });
 
-        if (section) p.textContent = section.trim();
+        const urlRegex = /(https?:\/\/[^\s\)\]]+)/g;
+        let lastIndex = 0;
+        let match;
+
+        while ((match = urlRegex.exec(section)) !== null) {
+            const textBeforeLink = section.slice(lastIndex, match.index);
+            if (textBeforeLink) {
+                p.appendChild(document.createTextNode(textBeforeLink));
+            }
+
+            const link = document.createElement('a');
+            link.href = match[0];
+            link.textContent = match[0];
+            link.target = "_blank";
+            link.classList.add("notification-url");
+            p.appendChild(link);
+
+            lastIndex = match.index + match[0].length;
+        }
+
+        p.appendChild(document.createTextNode(section.slice(lastIndex)));
+
         fragment.appendChild(p);
     });
 

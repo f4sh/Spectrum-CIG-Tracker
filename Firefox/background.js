@@ -56,8 +56,14 @@ browser.cookies.onChanged.addListener(async (changeInfo) => {
     }
 });
 
-function generateNotificationId(base) {
-    return `${base}-${Date.now()}-${Math.random()}`;
+let debounceTimeout;
+function debounceCheckForNewMessages() {
+    if (debounceTimeout) clearTimeout(debounceTimeout);
+    debounceTimeout = setTimeout(checkForNewMessages, 300);
+}
+
+function generateNotificationId(base, userId, messageId) {
+    return `${base}-${userId}-${messageId}-${Date.now()}-${Math.random()}`;
 }
 
 async function notifyUserToLogIn() {
@@ -190,7 +196,7 @@ async function startTrackingAfterRedirection() {
 
     const interval = await getTrackingInterval();
     trackingInterval = setInterval(() => {
-        checkForNewMessages();
+        debounceCheckForNewMessages();
     }, interval);
 
     console.log(`Tracking messages started at an interval of ${interval / 1000} seconds.`);
@@ -376,12 +382,7 @@ async function fetchUserMessages(userId, retryCount = 0) {
                 return [];
             }
 
-            if (data.data?.hits?.hits.length > 0) {
-                return data.data.hits.hits;
-            } else {
-                console.log(`No new messages for userId ${userId}.`);
-                return [];
-            }
+            return data.data?.hits?.hits || [];
         } else {
             if (response.status === 403 && retryCount < maxRetries) {
                 await new Promise(resolve => setTimeout(resolve, delay));
@@ -412,7 +413,52 @@ const hardcodedEmojis = {
     ':fire:': '🔥',
     ':pizza:': '🍕',
     ':tophat:': '🎩',
-    ':monocle_face:': '🧐'
+    ':monocle_face:': '🧐',
+    ':slightly_smiling_face:': '🙂',
+    ':smile:': '😄',
+    ':grinning:': '😀',
+    ':grin:': '😁',
+    ':joy:': '😂',
+    ':rofl:': '🤣',
+    ':sweat_smile:': '😅',
+    ':laughing:': '😆',
+    ':wink:': '😉',
+    ':blush:': '😊',
+    ':yum:': '😋',
+    ':sunglasses:': '😎',
+    ':heart_eyes:': '😍',
+    ':kissing_heart:': '😘',
+    ':kissing:': '😗',
+    ':kissing_smiling_eyes:': '😙',
+    ':kissing_closed_eyes:': '😚',
+    ':slight_smile:': '🙂',
+    ':thinking:': '🤔',
+    ':neutral_face:': '😐',
+    ':expressionless:': '😑',
+    ':no_mouth:': '😶',
+    ':smirk:': '😏',
+    ':unamused:': '😒',
+    ':sweat:': '😓',
+    ':pensive:': '😔',
+    ':confused:': '😕',
+    ':astonished:': '😲',
+    ':fearful:': '😨',
+    ':cold_sweat:': '😰',
+    ':weary:': '😩',
+    ':tired_face:': '😫',
+    ':sob:': '😭',
+    ':angry:': '😠',
+    ':rage:': '😡',
+    ':sparkles:': '✨',
+    ':thumbsup:': '👍',
+    ':thumbsdown:': '👎',
+    ':clap:': '👏',
+    ':raised_hands:': '🙌',
+    ':wave:': '👋',
+    ':pray:': '🙏',
+    ':eyes:': '👀',
+    ':heart:': '❤️',
+    ':broken_heart:': '💔'
 };
 
 async function fetchEmojis(communityId) {
@@ -472,6 +518,12 @@ function createStandardNotification(message, username, avatarUrl, details) {
     browser.notifications.create(`${username}-${Date.now()}`, notificationOptions);
 }
 
+function decodeHtmlEntities(text) {
+    const textArea = document.createElement("textarea");
+    textArea.innerHTML = text;
+    return textArea.value;
+}
+
 async function createNotification(message, username, avatarUrl = null) {
     const source = message._source || {};
     const details = message.details || {};
@@ -488,6 +540,8 @@ async function createNotification(message, username, avatarUrl = null) {
             formattedMessage = formatMessageWithEmojis(source.body || "", communityId);
         }
     }
+
+    formattedMessage = decodeHtmlEntities(formattedMessage);
 
     const notificationAvatarUrl = avatarUrl || details?.member?.avatar || 'icons/icon-48.png';
     const timeCreated = username === "MoTD" ? new Date(details.last_modified * 1000).toLocaleString() : new Date(source.time_created).toLocaleString();
@@ -529,47 +583,46 @@ async function createNotification(message, username, avatarUrl = null) {
         message: formattedMessage
     };
 
-    browser.notifications.create(messageId, notificationOptions, (notificationId) => {
-        browser.storage.local.get(['notificationsHistory', 'notificationsShown', 'notificationsClicked'], (stats) => {
-            let shownCount = (stats.notificationsShown || 0) + 1;
-            browser.storage.local.set({ notificationsShown: shownCount });
+    await browser.notifications.create(messageId, notificationOptions);
 
-            let history = stats.notificationsHistory || [];
-            const newNotification = {
-                notificationId,
-                username,
-                avatarUrl: notificationAvatarUrl,
-                timeCreated,
-                lobbyName,
-                messageLink,
-                body: formattedMessage,
-                title: notificationOptions.title
-            };
+    const result = await browser.storage.local.get(['notificationsHistory', 'notificationsShown', 'notificationsClicked']);
+    let shownCount = (result.notificationsShown || 0) + 1;
+    await browser.storage.local.set({ notificationsShown: shownCount });
 
-            if (history.length >= 100) history.shift();
-            history.push(newNotification);
-            browser.storage.local.set({ notificationsHistory: history });
-        });
+    let history = result.notificationsHistory || [];
+    const newNotification = {
+        notificationId: messageId,
+        username,
+        avatarUrl: notificationAvatarUrl,
+        timeCreated,
+        lobbyName,
+        messageLink,
+        body: formattedMessage,
+        title: notificationOptions.title
+    };
 
-        if (username !== "MoTD" && messageLink) {
-            browser.notifications.onClicked.addListener(function listener(id) {
-                if (id === notificationId) {
-                    browser.storage.local.get('notificationsClicked', (stats) => {
-                        let clickedCount = (stats.notificationsClicked || 0) + 1;
-                        browser.storage.local.set({ notificationsClicked: clickedCount });
-                        browser.tabs.query({ url: messageLink }, function (tabs) {
-                            if (tabs.length > 0) {
-                                browser.tabs.update(tabs[0].id, { active: true });
-                            } else {
-                                browser.tabs.create({ url: messageLink });
-                            }
-                        });
-                        browser.notifications.onClicked.removeListener(listener);
+    if (history.length >= 100) history.shift();
+    history.push(newNotification);
+    await browser.storage.local.set({ notificationsHistory: history });
+
+    if (username !== "MoTD" && messageLink) {
+        browser.notifications.onClicked.addListener(function listener(id) {
+            if (id === messageId) {
+                browser.storage.local.get('notificationsClicked').then((stats) => {
+                    let clickedCount = (stats.notificationsClicked || 0) + 1;
+                    browser.storage.local.set({ notificationsClicked: clickedCount });
+                    browser.tabs.query({ url: messageLink }).then((tabs) => {
+                        if (tabs.length > 0) {
+                            browser.tabs.update(tabs[0].id, { active: true });
+                        } else {
+                            browser.tabs.create({ url: messageLink });
+                        }
                     });
-                }
-            });
-        }
-    });
+                    browser.notifications.onClicked.removeListener(listener);
+                });
+            }
+        });
+    }
 }
 
 const lastMessageIds = {
@@ -623,9 +676,11 @@ async function checkForNewMessages() {
                     }
                 }
 
-                browser.storage.local.set({ lastMessageIds });
+                await browser.storage.local.set({ lastMessageIds });
             }
-        } catch (error) { }
+        } catch (error) {
+            console.error(`Error processing messages for user ${username}:`, error);
+        }
     }
 }
 
@@ -645,10 +700,12 @@ async function checkForMotdUpdates() {
                 if (motdMessage && lastModified !== lastMessageIds.motd) {
                     lastMessageIds.motd = lastModified;
                     await sendMotdNotification(motdMessage, lobby.name, lastModified, data.motd.community?.id);
-                    browser.storage.local.set({ lastMessageIds });
+                    await browser.storage.local.set({ lastMessageIds });
                 }
             }
-        } catch (error) { }
+        } catch (error) {
+            console.error(`Error fetching MoTD for lobby ${lobby.name}:`, error);
+        }
     }
 }
 
@@ -690,7 +747,7 @@ browser.runtime.onStartup.addListener(() => {
 
         if (result.tracking) {
             trackingInterval = setInterval(() => {
-                checkForNewMessages();
+                debounceCheckForNewMessages();
             }, interval * 1000);
         }
     });
@@ -824,7 +881,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
                             isLoginConfirmed = true;
                             trackingInterval = setInterval(() => {
-                                checkForNewMessages();
+                                debounceCheckForNewMessages();
                             }, interval);
 
                             browser.storage.local.get('trackMotd').then((result) => {
@@ -848,7 +905,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (trackingInterval) {
             clearInterval(trackingInterval);
             trackingInterval = setInterval(() => {
-                checkForNewMessages();
+                debounceCheckForNewMessages();
             }, message.interval * 1000);
         }
     }
@@ -873,7 +930,7 @@ async function initializeTracking() {
 
                 if (result.tracking) {
                     trackingInterval = setInterval(() => {
-                        checkForNewMessages();
+                        debounceCheckForNewMessages();
                     }, interval * 1000);
                 }
 
@@ -922,7 +979,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
                             isLoginConfirmed = true;
                             trackingInterval = setInterval(() => {
-                                checkForNewMessages();
+                                debounceCheckForNewMessages();
                             }, interval);
 
                             browser.storage.local.get('trackMotd').then((result) => {
@@ -951,7 +1008,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (trackingInterval) {
             clearInterval(trackingInterval);
             trackingInterval = setInterval(() => {
-                checkForNewMessages();
+                debounceCheckForNewMessages();
             }, message.interval * 1000);
         }
     }

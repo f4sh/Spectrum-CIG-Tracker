@@ -194,7 +194,7 @@ function clearHistory() {
 }
 
 function formatMessage(message) {
-    message = message.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="notification-url">$1</a>');
+    message = message.replace(/(https?:\/\/[^\s]+[^\s.,!?;)])/g, '<a href="$1" target="_blank" class="notification-url">$1</a>');
     message = message.replace(/([.!?])\s+/g, '$1<br><br>');
 
     return message

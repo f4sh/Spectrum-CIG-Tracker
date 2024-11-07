@@ -99,15 +99,17 @@ function loadHistory() {
 
             if (match) {
                 let [_, year, month, day, hours, minutes, seconds, period] = match;
-                let hour = parseInt(hours, 10);
+                hours = parseInt(hours, 10);
+                minutes = parseInt(minutes, 10);
+                seconds = parseInt(seconds, 10);
 
-                if (period.toLowerCase() === 'p.m.' && hour !== 12) {
-                    hour += 12;
-                } else if (period.toLowerCase() === 'a.m.' && hour === 12) {
-                    hour = 0;
+                if (period.toLowerCase() === 'p.m.' && hours !== 12) {
+                    hours += 12;
+                } else if (period.toLowerCase() === 'a.m.' && hours === 12) {
+                    hours = 0;
                 }
 
-                notification.notificationDate = new Date(year, month - 1, day, hour, parseInt(minutes, 10), parseInt(seconds, 10));
+                notification.notificationDate = new Date(year, month - 1, day, hours, minutes, seconds);
             } else {
                 console.warn("Date format did not match expected pattern:", notification.timeCreated);
                 notification.notificationDate = new Date(0);
@@ -355,6 +357,10 @@ function filterHistoryByDeveloperAndType(history) {
 
 function filterHistoryByDate(history) {
     const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(todayStart.getDate() - 1);
+
     return history.filter(notification => {
         const timeCreated = notification.timeCreated;
 
@@ -366,32 +372,25 @@ function filterHistoryByDate(history) {
             return false;
         }
 
-        const [_, year, month, day, hours, minutes, seconds, period] = match;
-        let hour = parseInt(hours, 10);
+        let [_, year, month, day, hours, minutes, seconds, period] = match;
+        hours = parseInt(hours, 10);
+        minutes = parseInt(minutes, 10);
+        seconds = parseInt(seconds, 10);
 
-        if (period.toLowerCase() === 'p.m.' && hour !== 12) {
-            hour += 12;
-        } else if (period.toLowerCase() === 'a.m.' && hour === 12) {
-            hour = 0;
+        if (period.toLowerCase() === 'p.m.' && hours !== 12) {
+            hours += 12;
+        } else if (period.toLowerCase() === 'a.m.' && hours === 12) {
+            hours = 0;
         }
 
-        const notificationDate = new Date(year, month - 1, day, hour, parseInt(minutes, 10), parseInt(seconds, 10));
+        const notificationDate = new Date(year, month - 1, day, hours, minutes, seconds);
 
         if (currentDateFilter === 'today') {
-            return (
-                notificationDate.getFullYear() === now.getFullYear() &&
-                notificationDate.getMonth() === now.getMonth() &&
-                notificationDate.getDate() === now.getDate()
-            );
+            return notificationDate >= todayStart && notificationDate < now;
         } else if (currentDateFilter === 'yesterday') {
-            const yesterday = new Date(now);
-            yesterday.setDate(now.getDate() - 1);
-            return (
-                notificationDate.getFullYear() === yesterday.getFullYear() &&
-                notificationDate.getMonth() === yesterday.getMonth() &&
-                notificationDate.getDate() === yesterday.getDate()
-            );
+            return notificationDate >= yesterdayStart && notificationDate < todayStart;
         }
+
         return true;
     });
 }

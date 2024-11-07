@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8] - November 7, 2024
+
+### Bug Fixes
+- **Custom Emoji Handling**: Reverted to using shortcodes for CIG-provided emojis due to OS notifications not supporting server-fetched custom emoji images.
+- **Date and Time Sorting**: Enhanced sorting to handle identical timestamps with a unique fallback, ensuring consistent order for notifications.
+
+---
+
 ## [1.7] - November 6, 2024
 
 ### Bug Fixes

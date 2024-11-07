@@ -227,23 +227,17 @@ function filterHistoryByDeveloperAndType(history) {
 
 function filterHistoryByDate(history) {
     const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(todayStart.getDate() - 1);
+
     return history.filter(notification => {
         const notificationDate = new Date(notification.timeCreated);
 
         if (currentDateFilter === 'today') {
-            return (
-                notificationDate.getFullYear() === now.getFullYear() &&
-                notificationDate.getMonth() === now.getMonth() &&
-                notificationDate.getDate() === now.getDate()
-            );
+            return notificationDate >= todayStart && notificationDate < now;
         } else if (currentDateFilter === 'yesterday') {
-            const yesterday = new Date(now);
-            yesterday.setDate(now.getDate() - 1);
-            return (
-                notificationDate.getFullYear() === yesterday.getFullYear() &&
-                notificationDate.getMonth() === yesterday.getMonth() &&
-                notificationDate.getDate() === yesterday.getDate()
-            );
+            return notificationDate >= yesterdayStart && notificationDate < todayStart;
         }
         return true;
     });

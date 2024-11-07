@@ -488,10 +488,11 @@ async function fetchEmojis(communityId) {
         if (data.success) {
 
             if (communityId === "1") {
-                emojiMap = {};
+                Object.assign(emojiMap, {});
             } else if (communityId === "9711") {
-                avocadoEmojiMap = {};
+                Object.assign(avocadoEmojiMap, {});
             }
+
             data.data.forEach(emoji => {
                 if (communityId === "1") {
                     emojiMap[`:${emoji.short_name}:`] = emoji.media_url;
@@ -508,13 +509,12 @@ async function fetchEmojis(communityId) {
     }
 }
 
-function formatMessageWithEmojis(message, communityId) {
 
+function formatMessageWithEmojis(message, communityId) {
     const currentEmojiMap = communityId === "1" ? emojiMap : avocadoEmojiMap;
 
     for (const [emoticon, url] of Object.entries(currentEmojiMap)) {
-        const regex = new RegExp(emoticon, 'g');
-        message = message.replace(regex, `<img src="${url}" alt="${emoticon}" class="emoticon">`);
+        message = message.replace(new RegExp(emoticon, 'g'), `[${emoticon}]`);
     }
 
     for (const [emoticon, emoji] of Object.entries(hardcodedEmojis)) {
@@ -580,7 +580,9 @@ async function createNotification(message, username, avatarUrl = null) {
     formattedMessage = decodeHtmlEntities(formattedMessage);
 
     const notificationAvatarUrl = avatarUrl || details?.member?.avatar || 'icons/icon-48.png';
-    const timeCreated = username === "MoTD" ? new Date(details.last_modified * 1000).toLocaleString() : new Date(source.time_created).toLocaleString();
+    const timeCreated = username === "MoTD"
+        ? new Date(details.last_modified * 1000).toLocaleString()
+        : new Date(source.time_created).toLocaleString();
     const messageId = message._id || `motd-${details.lobby?.name}-${details.last_modified}`;
     const messageType = message._index || (username === "MoTD" ? 'motd' : 'tavern_message');
     if (!lastMessageIds[messageType]) lastMessageIds[messageType] = {};
@@ -614,7 +616,9 @@ async function createNotification(message, username, avatarUrl = null) {
         messageLink = `https://robertsspaceindustries.com/spectrum/community/${communitySlug}/lobby/${lobbyId}/message/${messageId}`;
     }
 
-    contextMessage = username === "MoTD" ? `Updated on: ${timeCreated}` : `Posted on: ${timeCreated} in ${lobbyName}`;
+    contextMessage = username === "MoTD"
+        ? `Updated on: ${timeCreated}`
+        : `Posted on: ${timeCreated} in ${lobbyName}`;
 
     const notificationOptions = {
         type: "basic",

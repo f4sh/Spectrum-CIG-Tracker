@@ -309,7 +309,7 @@ function formatMessage(message) {
             }
         });
 
-        const urlRegex = /(https?:\/\/[^\s\)\]]+)/g;
+        const urlRegex = /(https?:\/\/[^\s.,!?;)]+)/g;
         let lastIndex = 0;
         let match;
 

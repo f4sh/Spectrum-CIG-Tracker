@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Spectrum CIG Tracker",
-    "version": "1.7",
+    "version": "1.8",
     "description": "Tracks Spectrum messages from CIG developers, providing real-time desktop notifications for new posts.",
     "action": {
         "default_popup": "popup.html",

@@ -83,7 +83,9 @@ function loadHistory() {
 
         history.sort((a, b) => new Date(b.timeCreated) - new Date(a.timeCreated));
 
-        const filteredHistory = filterHistoryByDeveloperAndType(history);
+        const uniqueHistory = removeDuplicateMessages(history);
+
+        const filteredHistory = filterHistoryByDeveloperAndType(uniqueHistory);
         const dateFilteredHistory = filterHistoryByDate(filteredHistory);
         const totalPages = Math.ceil(dateFilteredHistory.length / itemsPerPage);
         const historyContainer = document.getElementById('historyContainer');
@@ -145,6 +147,20 @@ function loadHistory() {
                 copyNotification(event.target);
             });
         });
+    });
+}
+
+function removeDuplicateMessages(history) {
+    const uniqueMessages = {};
+
+    return history.filter(notification => {
+        const key = `${notification.username}-${notification.messageLink}-${notification.lobbyName}`;
+
+        if (!uniqueMessages[key]) {
+            uniqueMessages[key] = true;
+            return true;
+        }
+        return false;
     });
 }
 

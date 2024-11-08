@@ -118,7 +118,9 @@ function loadHistory() {
 
         history.sort((a, b) => b.notificationDate - a.notificationDate);
 
-        const filteredHistory = filterHistoryByDeveloperAndType(history);
+        const uniqueHistory = removeDuplicateMessages(history);
+
+        const filteredHistory = filterHistoryByDeveloperAndType(uniqueHistory);
         const dateFilteredHistory = filterHistoryByDate(filteredHistory);
         const totalPages = Math.ceil(dateFilteredHistory.length / itemsPerPage);
         const historyContainer = document.getElementById('historyContainer');
@@ -219,6 +221,20 @@ function loadHistory() {
             });
             paginationContainer.appendChild(pageButton);
         }
+    });
+}
+
+function removeDuplicateMessages(history) {
+    const uniqueMessages = {};
+
+    return history.filter(notification => {
+        const key = `${notification.username}-${notification.messageLink}-${notification.lobbyName}`;
+
+        if (!uniqueMessages[key]) {
+            uniqueMessages[key] = true;
+            return true;
+        }
+        return false;
     });
 }
 

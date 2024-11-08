@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9] - November 8, 2024
+
+### Bug Fixes
+- **Aligning with the prior fix in notifications**: Fixed duplicate filtering in history to ensure only unique messages are displayed across different lobbies.
+
+---
+
 ## [1.8] - November 7, 2024
 
 ### Bug Fixes

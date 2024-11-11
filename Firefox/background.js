@@ -12,7 +12,8 @@ const predefinedUsers = {
     'Soulcrusher-CIG': 4490,
     'Armeggadon-CIG': 4392587,
     'Swift-CIG': 3377,
-    'Proxus-CIG': 478
+    'Proxus-CIG': 478,
+    'Spectral-CIG': 4178
 };
 
 let trackingInterval = null;
@@ -462,6 +463,8 @@ const hardcodedEmojis = {
 };
 
 async function fetchEmojis(communityId) {
+    console.log(`Fetching emojis for community ID: ${communityId}...`);
+
     const cookies = await getRSICookies();
     const rsiToken = cookies ? cookies.rsiToken : null;
 
@@ -479,11 +482,13 @@ async function fetchEmojis(communityId) {
     if (response.ok) {
         const data = await response.json();
         if (data.success) {
+
             if (communityId === "1") {
-                emojiMap = {};
+                Object.assign(emojiMap, {});
             } else if (communityId === "9711") {
-                avocadoEmojiMap = {};
+                Object.assign(avocadoEmojiMap, {});
             }
+
             data.data.forEach(emoji => {
                 if (communityId === "1") {
                     emojiMap[`:${emoji.short_name}:`] = emoji.media_url;
@@ -491,20 +496,27 @@ async function fetchEmojis(communityId) {
                     avocadoEmojiMap[`:${emoji.short_name}:`] = emoji.media_url;
                 }
             });
+            console.log("Emojis fetched successfully:", communityId === "1" ? emojiMap : avocadoEmojiMap);
+        } else {
+            console.error("Error fetching emojis:", data.msg);
         }
+    } else {
+        console.error("Failed to fetch emojis:", response.statusText);
     }
 }
 
 function formatMessageWithEmojis(message, communityId) {
     const currentEmojiMap = communityId === "1" ? emojiMap : avocadoEmojiMap;
+
     for (const [emoticon, url] of Object.entries(currentEmojiMap)) {
-        const regex = new RegExp(emoticon, 'g');
-        message = message.replace(regex, `<img src="${url}" alt="${emoticon}" class="emoticon">`);
+        message = message.replace(new RegExp(emoticon, 'g'), `[${emoticon}]`);
     }
+
     for (const [emoticon, emoji] of Object.entries(hardcodedEmojis)) {
         const regex = new RegExp(emoticon, 'g');
         message = message.replace(regex, emoji);
     }
+
     return message;
 }
 
@@ -550,6 +562,7 @@ async function createNotification(message, username, avatarUrl = null) {
         formattedMessage = formatMessageWithEmojis(source.body || "", null);
     } else {
         if (!communityId) {
+            console.error("Community ID is undefined. Cannot fetch emojis.");
             formattedMessage = formatMessageWithEmojis(source.body || "", null);
         } else {
             await fetchEmojis(communityId);

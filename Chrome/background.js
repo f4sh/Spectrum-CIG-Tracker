@@ -12,7 +12,8 @@ const predefinedUsers = {
     'Soulcrusher-CIG': 4490,
     'Armeggadon-CIG': 4392587,
     'Swift-CIG': 3377,
-    'Proxus-CIG': 478
+    'Proxus-CIG': 478,
+    'Spectral-CIG': 4178
 };
 
 let trackingInterval = null;
